@@ -11,6 +11,7 @@ class CampaignCard extends StatelessWidget {
   final double progressPercent;
   final String goal;
   final VoidCallback? onDonateTap;
+  final VoidCallback? onTap;
 
   const CampaignCard({
     super.key,
@@ -21,8 +22,8 @@ class CampaignCard extends StatelessWidget {
     required this.progressPercent,
     required this.goal,
     this.onDonateTap,
+    this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -30,7 +31,9 @@ class CampaignCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       width: 280,
       margin: const EdgeInsets.only(right: 16),
       decoration: BoxDecoration(
@@ -44,8 +47,7 @@ class CampaignCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 🔷 Image + Badge
           Stack(
@@ -54,18 +56,7 @@ class CampaignCard extends StatelessWidget {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(16),
                 ),
-                child: Image.network(
-                  image,
-                  height: 150,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 150,
-                    color: cs.surface,
-                    child: Icon(Icons.image_outlined, color: cs.onSurface),
-                  ),
-                ),
-              ),
+                child: _buildImage(image, cs),              ),
 
               Positioned(
                 top: 12,
@@ -179,7 +170,7 @@ class CampaignCard extends StatelessWidget {
                       onTap: onDonateTap,
                       width: 110,
                       height: 38,
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      variant: ButtonVariant.primary,
                     ),
                   ],
                 ),
@@ -188,6 +179,33 @@ class CampaignCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
+    );
+  }
+
+  Widget _buildImage(String image, ColorScheme cs) {
+    final errorWidget = Container(
+      height: 150,
+      color: cs.surface,
+      child: Icon(Icons.image_outlined, color: cs.onSurface),
+    );
+
+    if (image.startsWith('assets/')) {
+      return Image.asset(
+        image,
+        height: 150,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => errorWidget,
+      );
+    }
+
+    return Image.network(
+      image,
+      height: 150,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => errorWidget,
     );
   }
 }

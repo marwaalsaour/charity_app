@@ -1,162 +1,162 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
+import '../utils/donation_flow_helper.dart';
+import 'donation_cover_image.dart';
 
 class DonationCard extends StatelessWidget {
   const DonationCard({super.key, required this.donation});
+
   final DonationModel donation;
+
+  static const double _imageHeight = 190;
+
+  void _openDonate(BuildContext context) {
+    openDonateAmountScreen(
+      context,
+      DonationCheckoutArgs(causeTitle: donation.nameKey.tr()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
+    final ext = theme.extension<AppThemeExtension>()!;
 
-    return InkWell(
-      onTap: () {
-        context.push('/donation_details', extra: donation);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: ext.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ext.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () =>
+                context.push(AppRoutes.donationDetails, extra: donation),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DonationCoverImage(
+                  donation: donation,
+                  height: _imageHeight,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: AppColors.lightBorder,
+                      Text(
+                        donation.nameKey.tr(),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
                         ),
-                        child: donation.image.isEmpty
-                            ? const Icon(Icons.person)
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  donation.image,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
                       ),
-
-                      const SizedBox(width: 12),
-
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 6),
+                      Text(
+                        donation.titleKey.tr(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: ext.textSecondary,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        donation.descriptionKey.tr(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: ext.textSecondary,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: donation.progress,
+                          minHeight: 6,
+                          backgroundColor: ext.progressBg,
+                          color: ext.progressFill,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            donation.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            '${'raised'.tr()}: \$${donation.raised.toInt()}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: ext.textSecondary,
+                            ),
                           ),
                           Text(
-                            donation.title,
+                            '${(donation.progress * 100).toInt()}%',
                             style: const TextStyle(
-                              color: Colors.grey,
                               fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.accentDark,
+                            ),
+                          ),
+                          Text(
+                            '${'goal'.tr()}: \$${donation.goal.toInt()}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: ext.textSecondary,
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 4),
                     ],
                   ),
-                  const SizedBox(height: 12),
-
-                  Text(
-                    donation.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.lightTextSecond,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: donation.progress,
-                      minHeight: 6,
-                      backgroundColor: AppColors.lightBorder,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('RAISED', style: TextStyle(fontSize: 10)),
-                          Text('\$${donation.raised.toInt()}'),
-                        ],
-                      ),
-
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        child: Text(
-                          '${(donation.progress * 100).toInt()}%',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Text('GOAL', style: TextStyle(fontSize: 10)),
-                          Text('\$${donation.goal.toInt()}'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(16),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  'donate_now'.tr(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+              ],
+            ),
+          ),
+          Material(
+            color: cs.primary,
+            child: InkWell(
+              onTap: () => _openDonate(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'donate_now'.tr(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

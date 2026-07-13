@@ -1,44 +1,39 @@
-import 'package:charity_app/core/constants/app_colors.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../data/models/donation_model.dart';
 import '../widgets/category_card.dart';
 
 class ImpactScreen extends StatelessWidget {
   const ImpactScreen({super.key});
 
+  void _openCategory(BuildContext context, DonationCategory category) {
+    context.push(AppRoutes.donationsList, extra: category);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<AppThemeExtension>()!;
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: AppBar(
-          backgroundColor: AppColors.primary, // لون الخلفية
           elevation: 4,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () {
-              context.go('/home');
-            },
+            onPressed: () => context.go(AppRoutes.donorHome),
           ),
-          title: Text(
-            'donation_categories'.tr(),
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.lightBackground),
-          ),
+          title: Text('donation_categories'.tr()),
           centerTitle: false,
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadiusGeometry.vertical(
-              bottom: Radius.circular(20),
-            ),
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
           ),
         ),
       ),
-
       body: SafeArea(
         child: Column(
           children: [
@@ -55,7 +50,7 @@ class ImpactScreen extends StatelessWidget {
                   Text(
                     'cause_description'.tr(),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.lightTextSecond,
+                      color: ext.textSecondary,
                     ),
                   ),
                 ],
@@ -74,43 +69,29 @@ class ImpactScreen extends StatelessWidget {
                       icon: Icons.school,
                       title: 'education'.tr(),
                       subtitle: 'education_desc'.tr(),
-                      onDonate: () {
-                        context.push(
-                          '/donations_list',
-                          extra: DonationCategory.education,
-                        );
-                      },
+                      onDonate: () =>
+                          _openCategory(context, DonationCategory.education),
                     ),
-
                     CategoryCard(
                       icon: Icons.medical_services,
                       title: 'medical'.tr(),
                       subtitle: 'medical_desc'.tr(),
-                      onDonate: () {
-                        context.push(
-                          '/donations_list',
-                          extra: DonationCategory.medical,
-                        );
-                      },
+                      onDonate: () =>
+                          _openCategory(context, DonationCategory.medical),
                     ),
                     CategoryCard(
                       icon: Icons.face_outlined,
                       title: 'orphans'.tr(),
                       subtitle: 'orphans_desc'.tr(),
-                      onDonate: () {
-                        context.push(
-                          '/donations_list',
-                          extra: DonationCategory.orphans,
-                        );
-                      },
+                      onDonate: () =>
+                          _openCategory(context, DonationCategory.orphans),
                     ),
                     CategoryCard(
                       icon: Icons.volunteer_activism_outlined,
                       title: 'campaigns'.tr(),
                       subtitle: 'campaigns_desc'.tr(),
-                      onDonate: () {
-                        context.push('/campaigns_list');
-                      },
+                      onDonate: () =>
+                          context.push(AppRoutes.communityCampaigns),
                     ),
                   ],
                 ),

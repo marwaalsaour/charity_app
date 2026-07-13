@@ -1,16 +1,17 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_theme_extensions.dart';
 
 class CategoryTabs extends StatelessWidget {
-  final List<String> categories;
-  final String selected;
+  final List<String> categoryKeys;
+  final String selectedKey;
   final ValueChanged<String> onSelect;
 
   const CategoryTabs({
     super.key,
-    required this.categories,
-    required this.selected,
+    required this.categoryKeys,
+    required this.selectedKey,
     required this.onSelect,
   });
 
@@ -24,13 +25,13 @@ class CategoryTabs extends StatelessWidget {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: categories.length,
+        itemCount: categoryKeys.length,
         itemBuilder: (context, i) {
-          final cat = categories[i];
-          final isSelected = cat == selected;
+          final key = categoryKeys[i];
+          final isSelected = key == selectedKey;
 
           return GestureDetector(
-            onTap: () => onSelect(cat),
+            onTap: () => onSelect(key),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.only(right: 10),
@@ -44,7 +45,7 @@ class CategoryTabs extends StatelessWidget {
                 ),
               ),
               child: Text(
-                cat,
+                key.tr(),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,

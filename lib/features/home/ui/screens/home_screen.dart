@@ -2,10 +2,16 @@ import 'package:charity_app/core/constants/app_colors.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_theme/theme_cubit.dart';
 import '../../../../core/constants/app_theme/theme_state.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/custom_button.dart';
+import '../../../donations/data/models/donation_checkout_args.dart';
+import '../../../donations/ui/utils/donation_flow_helper.dart';
+import '../../data/models/campaign_model.dart';
+import '../../data/models/search_suggestion.dart';
 import '../../logic/home_cubit.dart';
 import '../../logic/home_state.dart';
 
@@ -91,8 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: AppSearchBar(
                     hintText: 'search_hint'.tr(),
+                    campaigns: state.campaigns,
                     onChanged: (query) =>
                         context.read<HomeCubit>().filterBySearch(query),
+                    onSuggestionTap: (suggestion) =>
+                        _onSearchSuggestionTap(context, suggestion),
                   ),
                 ),
 
@@ -100,44 +109,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // 📂 Categories
                 CategoryTabs(
-                  categories: context
-                      .read<HomeCubit>()
-                      .categoriesKeys
-                      .map((e) => e.tr())
-                      .toList(),
-                  selected: state.selectedCategory.tr(),
+                  categoryKeys: context.read<HomeCubit>().categoriesKeys,
+                  selectedKey: state.selectedCategory,
                   onSelect: context.read<HomeCubit>().filterByCategory,
                 ),
 
                 const SizedBox(height: 20),
 
                 Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.handshake_outlined,
-                        color: Colors.black12,
-                        size: 28,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'ATAA',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 4,
-                          color: Colors.black12,
-                        ),
-                      ),
-                    ],
+                  child: Image.asset(
+                    'assets/image/logo-green.png',
+                    height: 56,
+                    fit: BoxFit.contain,
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
                 // ⚡ Quick donate
-                QuickDonateButton(onTap: () {}, label: 'quick_donate'.tr()),
+                QuickDonateButton(
+                  onTap: () => openDonateAmountScreen(
+                    context,
+                    DonationCheckoutArgs(
+                      causeTitle: 'quick_donate'.tr(),
+                    ),
+                  ),
+                  label: 'quick_donate'.tr(),
+                ),
 
                 const SizedBox(height: 24),
 
@@ -172,24 +170,39 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 🏷 Campaigns
                 SizedBox(
                   height: 310,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(left: 16),
-                    itemCount: state.filteredCampaigns.length,
-                    itemBuilder: (context, i) {
-                      final campaign = state.filteredCampaigns[i];
+                  child: state.filteredCampaigns.isEmpty
+                      ? Center(
+                          child: Text(
+                            'no_campaigns'.tr(),
+                            style: TextStyle(
+                              color: cs.onSurface.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.only(left: 16),
+                          itemCount: state.filteredCampaigns.length,
+                          itemBuilder: (context, i) {
+                            final campaign = state.filteredCampaigns[i];
 
-                      return CampaignCard(
-                        title: campaign.title,
-                        category: campaign.category,
-                        image: campaign.imageUrl,
-                        progress: campaign.progress,
-                        progressPercent: campaign.progressPercent,
-                        goal: campaign.formattedGoal,
-                        onDonateTap: () {},
-                      );
-                    },
-                  ),
+                            return CampaignCard(
+                              title: campaign.titleKey.tr(),
+                              category: campaign.categoryLabelKey.tr(),
+                              image: campaign.imageUrl,
+                              progress: campaign.progress,
+                              progressPercent: campaign.progressPercent,
+                              goal: campaign.formattedGoal,
+                              onTap: () => _openCampaignDetails(context, campaign),
+                              onDonateTap: () => openDonateAmountScreen(
+                                context,
+                                DonationCheckoutArgs(
+                                  causeTitle: campaign.titleKey.tr(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
 
                 const SizedBox(height: 24),
@@ -199,6 +212,36 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
+  }
+
+  void _onSearchSuggestionTap(
+    BuildContext context,
+    SearchSuggestion suggestion,
+  ) {
+    final cubit = context.read<HomeCubit>();
+
+    if (suggestion.categoryKey != null) {
+      cubit.filterByCategory(suggestion.categoryKey!);
+      cubit.filterBySearch('');
+      return;
+    }
+
+    cubit.filterBySearch(suggestion.query);
+
+    if (suggestion.campaign != null) {
+      _openCampaignDetails(context, suggestion.campaign!);
+    }
+  }
+
+  void _openCampaignDetails(BuildContext context, CampaignModel campaign) {
+    if (campaign.linkedDonation != null) {
+      context.push(AppRoutes.donationDetails, extra: campaign.linkedDonation);
+    } else if (campaign.linkedCommunity != null) {
+      context.push(
+        AppRoutes.communityCampaignDetails,
+        extra: campaign.linkedCommunity,
+      );
+    }
   }
 
   Widget _buildHeader(BuildContext context, HomeLoaded state) {
@@ -410,7 +453,10 @@ class AppDrawer extends StatelessWidget {
               child: CustomButton(
                 label: 'volunteer_with_us'.tr(),
                 icon: Icons.volunteer_activism,
-                onTap: () {},
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push(AppRoutes.volunteerForm);
+                },
               ),
             ),
           ],

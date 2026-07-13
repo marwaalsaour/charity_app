@@ -10,16 +10,19 @@ class AppColors {
   static const Color accent = Color(0xFFF2C055);
   static const Color accentDark = Color(0xFFC8960C);
 
+  // ── Auth screens
+  static const Color authBackground = Color(0xFFF7F6F2);
+  static const Color authHeaderBackground = Color(0xFFE8F1EF);
+
   // ── Light Mode
   static const Color lightBackground = Color(0xFFF5F5F5);
   static const Color lightSurface = Color(0xFFFFFFFF);
   static const Color lightInputFill = Color(0xFFF0F0F0);
   static const Color lightTextPrimary = Color(0xFF1A1A1A);
   static const Color lightTextSecond = Color(0xFF6B6B6B);
-  static const Color lightTextHint = Color(0xFFFFFFFF);
+  static const Color lightTextHint = Color(0xFF9E9E9E);
   static const Color lightBorder = Color(0xFFE0E0E0);
   static const Color lightCardBg = Color(0xFFFFFFFF);
-  static const Color lightStatCard = Color(0xFF1E6B5E);
 
   // ── Dark Mode
   static const Color darkBackground = Color(0xFF121212);

@@ -1,10 +1,594 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:io';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/auth/user_role.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_radius.dart';
+import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../donations/data/repositories/donation_receipt_repository.dart';
+import '../../data/models/user_profile_model.dart';
+import '../../data/repositories/user_profile_repository.dart';
+
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key, this.role = UserRole.donor});
+
+  final UserRole role;
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _profileRepository = UserProfileRepository();
+
+  double _walletBalance = 0;
+  String _walletCurrency = 'USD';
+  bool _loadingWallet = true;
+  UserProfileModel? _profile;
+  bool _loadingProfile = true;
+
+  bool get _isBeneficiary => widget.role == UserRole.beneficiary;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_isBeneficiary) {
+      _loadWallet();
+    }
+    _loadProfile();
+  }
+
+  Future<void> _loadWallet() async {
+    final receipts = await DonationReceiptRepository().getReceipts();
+    if (!mounted) return;
+
+    final total = receipts.fold<double>(0, (sum, r) => sum + r.amount);
+    setState(() {
+      _walletBalance = total;
+      _walletCurrency = receipts.isNotEmpty ? receipts.last.currency : 'USD';
+      _loadingWallet = false;
+    });
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await _profileRepository.getProfile();
+    if (!mounted) return;
+    setState(() {
+      _profile = profile;
+      _loadingProfile = false;
+    });
+  }
+
+  Future<void> _openEditProfile() async {
+    final saved = await context.push<bool>(AppRoutes.editProfile);
+    if (saved == true) {
+      _loadProfile();
+    }
+  }
+
+  String get _displayName {
+    if (_profile != null && _profile!.hasName) {
+      return _profile!.fullName;
+    }
+    return _isBeneficiary
+        ? 'beneficiary_mock_name'.tr()
+        : 'donor_mock_name'.tr();
+  }
+
+  String? get _imagePath => _profile?.imagePath;
+
+  int get _memberSinceYear => _profile?.memberSinceYear ?? 2022;
 
   @override
   Widget build(BuildContext context) {
-    return const Placeholder();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
+    final ext = theme.extension<AppThemeExtension>()!;
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: Text('nav_profile'.tr()),
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const SizedBox(height: 8),
+          _AvatarSection(
+            name: _displayName,
+            imagePath: _imagePath,
+            memberSinceYear: _memberSinceYear,
+            roleLabel: _isBeneficiary
+                ? 'profile_beneficiary_role'.tr()
+                : 'profile_donor_role'.tr(),
+            isLoading: _loadingProfile,
+            onEditTap: _openEditProfile,
+          ),
+          const SizedBox(height: 24),
+          if (_isBeneficiary)
+            const _BeneficiaryRequestsCard()
+          else
+            _WalletCard(
+              balance: _walletBalance,
+              currency: _walletCurrency,
+              isLoading: _loadingWallet,
+            ),
+          const SizedBox(height: 24),
+          if (_isBeneficiary) ...[
+            _ProfileMenuTile(
+              icon: Icons.assignment_outlined,
+              iconColor: cs.primary,
+              iconBg: cs.primary.withValues(alpha: 0.1),
+              title: 'my_requests'.tr(),
+              onTap: () => context.go(AppRoutes.beneficiaryRequests),
+            ),
+            const SizedBox(height: 10),
+          ] else ...[
+            _ProfileMenuTile(
+              icon: Icons.volunteer_activism_outlined,
+              iconColor: cs.primary,
+              iconBg: cs.primary.withValues(alpha: 0.1),
+              title: 'my_activities'.tr(),
+              onTap: () => context.push(AppRoutes.myActivities),
+            ),
+            const SizedBox(height: 10),
+            _ProfileMenuTile(
+              icon: Icons.favorite,
+              iconColor: AppColors.accentDark,
+              iconBg: AppColors.accent.withValues(alpha: 0.25),
+              title: 'my_donations'.tr(),
+              onTap: () async {
+                await context.push(AppRoutes.myDonations);
+                _loadWallet();
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+          _ProfileMenuTile(
+            icon: Icons.edit_outlined,
+            iconColor: cs.primary,
+            iconBg: ext.inputFill,
+            title: 'edit_profile'.tr(),
+            onTap: _openEditProfile,
+          ),
+          const SizedBox(height: 28),
+          _LogoutButton(
+            onTap: () => context.go(widget.role.loginRoute),
+          ),
+          const SizedBox(height: 32),
+          Center(
+            child: Opacity(
+              opacity: isDark ? 0.4 : 0.25,
+              child: Column(
+                children: [
+                  Icon(Icons.volunteer_activism, size: 32, color: cs.primary),
+                  const SizedBox(height: 4),
+                  Text(
+                    'app_name'.tr(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: cs.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvatarSection extends StatelessWidget {
+  const _AvatarSection({
+    required this.name,
+    required this.imagePath,
+    required this.memberSinceYear,
+    required this.roleLabel,
+    required this.isLoading,
+    required this.onEditTap,
+  });
+
+  final String name;
+  final String? imagePath;
+  final int memberSinceYear;
+  final String roleLabel;
+  final bool isLoading;
+  final VoidCallback onEditTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final ext = Theme.of(context).extension<AppThemeExtension>()!;
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: onEditTap,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: ext.cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: ext.border, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.2
+                            : 0.06,
+                      ),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: isLoading
+                    ? const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : _buildAvatarContent(cs),
+              ),
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.edit,
+                    size: 14,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          name,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: cs.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            roleLabel,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: cs.primary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'profile_member_since'.tr(namedArgs: {'year': '$memberSinceYear'}),
+          style: TextStyle(fontSize: 14, color: ext.textSecondary),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatarContent(ColorScheme cs) {
+    if (imagePath != null && File(imagePath!).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.file(
+          File(imagePath!),
+          width: 100,
+          height: 100,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+    return Icon(Icons.person, size: 48, color: cs.primary);
+  }
+}
+
+class _BeneficiaryRequestsCard extends StatelessWidget {
+  const _BeneficiaryRequestsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
+    final ext = theme.extension<AppThemeExtension>()!;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: ext.cardBackground,
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        border: Border.all(color: ext.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 48,
+            decoration: BoxDecoration(
+              color: cs.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'my_requests'.tr().toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: ext.textSecondary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '2',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: cs.onSurface,
+                  ),
+                ),
+                Text(
+                  'beneficiary_requests_active'.tr(),
+                  style: TextStyle(fontSize: 12, color: ext.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.assignment_outlined,
+            color: cs.primary.withValues(alpha: 0.7),
+            size: 32,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletCard extends StatelessWidget {
+  const _WalletCard({
+    required this.balance,
+    required this.currency,
+    required this.isLoading,
+  });
+
+  final double balance;
+  final String currency;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
+    final ext = theme.extension<AppThemeExtension>()!;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: ext.cardBackground,
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        border: Border.all(color: ext.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'wallet'.tr().toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: ext.textSecondary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (isLoading)
+                  SizedBox(
+                    height: 28,
+                    width: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
+                    ),
+                  )
+                else
+                  Text(
+                    _formatBalance(balance, currency),
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            color: cs.primary.withValues(alpha: 0.7),
+            size: 32,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBalance(double amount, String currency) {
+    final symbol = switch (currency) {
+      'USD' => '\$',
+      'EUR' => '€',
+      'SYP' => 'ل.س ',
+      _ => '$currency ',
+    };
+    return '$symbol${amount.toStringAsFixed(0)}';
+  }
+}
+
+class _ProfileMenuTile extends StatelessWidget {
+  const _ProfileMenuTile({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<AppThemeExtension>()!;
+
+    return Material(
+      color: ext.cardBackground,
+      borderRadius: BorderRadius.circular(AppRadius.medium),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            border: Border.all(color: ext.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: ext.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LogoutButton extends StatelessWidget {
+  const _LogoutButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: isDark
+          ? AppColors.error.withValues(alpha: 0.15)
+          : const Color(0xFFFDECEA),
+      borderRadius: BorderRadius.circular(AppRadius.medium),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.logout, color: AppColors.error, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'logout'.tr(),
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

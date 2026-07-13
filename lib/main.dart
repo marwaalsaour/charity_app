@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/auth/user_role_cubit.dart';
 import 'core/constants/app_theme/app_theme.dart';
 import 'core/constants/app_theme/theme_cubit.dart';
 import 'core/constants/app_theme/theme_state.dart';
@@ -36,6 +37,7 @@ class AtaaApp extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => ThemeCubit(initialMode: initialThemeMode)),
+        BlocProvider(create: (_) => UserRoleCubit()..loadRole()),
         BlocProvider(create: (_) => HomeCubit()),
       ],
       child: BlocBuilder<ThemeCubit, ThemeState>(
@@ -46,7 +48,7 @@ class AtaaApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
-            themeMode: themeState?.mode,
+            themeMode: themeState.mode,
 
             locale: context.locale,
             supportedLocales: context.supportedLocales,

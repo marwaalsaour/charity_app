@@ -1,7 +1,24 @@
 import 'package:flutter/material.dart';
 
+import 'app_colors.dart';
+
 class AppTextStyles {
   AppTextStyles._();
+
+  static TextStyle headline(BuildContext context) {
+    return TextStyle(
+      fontSize: 26,
+      fontWeight: FontWeight.bold,
+      color: Theme.of(context).colorScheme.onSurface,
+    );
+  }
+
+  static TextStyle subtitle(BuildContext context) {
+    return TextStyle(
+      fontSize: 14,
+      color: AppColors.lightTextSecond,
+    );
+  }
 
   static TextStyle title(BuildContext context) {
     return TextStyle(

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../constants/app_radius.dart';
 
-enum ButtonVariant { filled, outlined }
+enum ButtonVariant { primary, accent, outline }
 
 class CustomButton extends StatelessWidget {
   final String label;
@@ -10,84 +11,75 @@ class CustomButton extends StatelessWidget {
   final IconData? icon;
   final bool isLoading;
   final double? width;
-
-  // ✨ أضفناهم
-  final Color? backgroundColor;
-  final Color? textColor;
   final double height;
 
   const CustomButton({
     super.key,
     required this.label,
     this.onTap,
-    this.variant = ButtonVariant.filled,
+    this.variant = ButtonVariant.accent, // 👈 الافتراضي أصفر
     this.icon,
     this.isLoading = false,
     this.width,
-    this.backgroundColor,
-    this.textColor,
-    this.height = 48, // 👈 default height
+    this.height = 48,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isFilled = variant == ButtonVariant.filled;
+    final Color bg;
+    final Color fg;
+    final Border? border;
 
-    final bg =
-        backgroundColor ?? (isFilled ? AppColors.accent : Colors.transparent);
+    switch (variant) {
+      case ButtonVariant.primary:
+        bg = AppColors.primary;
+        fg = Colors.white;
+        border = null;
+        break;
 
-    final fgColor =
-        textColor ??
-        (isFilled
-            ? AppColors.lightTextHint
-            : Theme.of(context).colorScheme.primary);
+      case ButtonVariant.accent:
+        bg = AppColors.accent;
+        fg = Colors.black87;
+        border = null;
+        break;
 
-    final border = isFilled
-        ? null
-        : Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5);
+      case ButtonVariant.outline:
+        bg = Colors.transparent;
+        fg = AppColors.primary;
+        border = Border.all(color: AppColors.primary, width: 1.5);
+        break;
+    }
 
     return GestureDetector(
       onTap: isLoading ? null : onTap,
-      child: AnimatedOpacity(
-        opacity: onTap == null ? 0.5 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          width: width ?? double.infinity,
-          height: height, // 👈 مهم
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(50),
-            border: border,
-          ),
-          child: Center(
-            child: isLoading
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: fgColor,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (icon != null) ...[
-                        Icon(icon, color: fgColor, size: 20),
-                        const SizedBox(width: 8),
-                      ],
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: fgColor,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
+      child: Container(
+        width: width ?? double.infinity,
+        height: height,
+        decoration: BoxDecoration(
+          color: bg,
+          border: border,
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+        child: Center(
+          child: isLoading
+              ? CircularProgressIndicator(color: fg)
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (icon != null) ...[
+                      Icon(icon, color: fg, size: 20),
+                      const SizedBox(width: 8),
                     ],
-                  ),
-          ),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: fg,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );

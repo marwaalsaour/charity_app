@@ -1,8 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_theme_extensions.dart';
 
 class CategoryCard extends StatelessWidget {
   final IconData icon;
@@ -20,7 +20,10 @@ class CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
+    final ext = theme.extension<AppThemeExtension>()!;
 
     return Material(
       color: Colors.transparent,
@@ -30,11 +33,12 @@ class CategoryCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: cs.surface,
+            color: ext.cardBackground,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: ext.border),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -43,53 +47,45 @@ class CategoryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              /// icon box
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: cs.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: Colors.white),
               ),
-
-              /// title
               const SizedBox(height: 12),
-
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-
-              /// subtitle
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: cs.onSurface,
+                ),
+              ),
               const SizedBox(height: 4),
-
               Text(
                 subtitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey),
-              ),
-
-              /// donate button
-              const Spacer(),
-
-              GestureDetector(
-                onTap: onDonate,
-                child: Row(
-                  children: [
-                    Text(
-                      'donate'.tr(),
-                      style: TextStyle(
-                        color: AppColors.accent,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      size: 12,
-                      color: AppColors.accent,
-                    ),
-                  ],
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: ext.textSecondary,
                 ),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Text(
+                    'donate'.tr(),
+                    style: const TextStyle(
+                      color: AppColors.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 12,
+                    color: AppColors.accent,
+                  ),
+                ],
               ),
             ],
           ),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:charity_app/core/constants/app_radius.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
@@ -141,7 +142,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
             height: _image != null ? 160 : 110,
             decoration: BoxDecoration(
               color: fillColor,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.medium),
               border: Border.all(color: borderColor, width: 1.5),
             ),
             child: _image != null ? _preview(cs) : _placeholder(cs),
@@ -185,7 +186,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(AppRadius.medium - 1),
           child: Image.file(
             _image!,
             width: double.infinity,

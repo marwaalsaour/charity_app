@@ -1,33 +1,32 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../data/models/campaign_model.dart';
+import '../data/repositories/home_campaign_repository.dart';
 import 'home_state.dart';
 
 class HomeCubit extends Cubit<HomeState> {
-  HomeCubit() : super(HomeInitial());
+  HomeCubit({HomeCampaignRepository? repository})
+      : _repository = repository ?? HomeCampaignRepository(),
+        super(HomeInitial());
 
-  List<String> get categoriesKeys => [
+  final HomeCampaignRepository _repository;
+  List<String> get categoriesKeys => const [
     'categories.all',
     'categories.patients',
     'categories.education',
     'categories.environment',
     'categories.orphans',
   ];
+
   Future<void> loadHome() async {
     emit(HomeLoading());
     try {
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      final campaigns = CampaignModel.mockList;
-
+      final campaigns = await _repository.getRecentCampaigns();
       emit(
         HomeLoaded(
           volunteers: 12,
           donors: 176,
           beneficiaries: 495,
           campaigns: campaigns,
-          selectedCategory: 'categories.all',
-          filteredCampaigns: campaigns,
         ),
       );
     } catch (e) {
@@ -37,23 +36,13 @@ class HomeCubit extends Cubit<HomeState> {
 
   void filterBySearch(String query) {
     if (state is HomeLoaded) {
-      final current = state as HomeLoaded;
-      final filtered = query.isEmpty
-          ? current.campaigns
-          : current.campaigns
-                .where(
-                  (c) => c.title.toLowerCase().contains(query.toLowerCase()),
-                )
-                .toList();
-
-      emit(current.copyWith(filteredCampaigns: filtered));
+      emit((state as HomeLoaded).copyWith(searchQuery: query));
     }
   }
 
-  void filterByCategory(String category) {
-    final current = state;
-    if (current is HomeLoaded) {
-      emit(current.copyWith(selectedCategory: category));
+  void filterByCategory(String categoryKey) {
+    if (state is HomeLoaded) {
+      emit((state as HomeLoaded).copyWith(selectedCategory: categoryKey));
     }
   }
 

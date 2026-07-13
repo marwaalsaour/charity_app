@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ThemeCubit extends Cubit<ThemeState> {
   static const _key = 'theme_mode';
 
-  // ✅ إضافة initialMode كـ parameter
   ThemeCubit({ThemeMode initialMode = ThemeMode.light})
     : super(ThemeState(initialMode));
 

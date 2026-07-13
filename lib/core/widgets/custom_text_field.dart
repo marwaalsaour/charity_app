@@ -1,3 +1,4 @@
+import 'package:charity_app/core/constants/app_radius.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../constants/app_colors.dart';
@@ -59,9 +60,9 @@ class _CustomTextFieldState extends State<CustomTextField> {
         Text(
           widget.label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: labelColor,
+            color: iconColor,
           ),
         ),
         const SizedBox(height: 6),
@@ -84,7 +85,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
                 color: isDark
                     ? AppColors.darkTextHint
                     : AppColors.lightTextHint,
-                fontSize: 13,
+                fontSize: 14,
               ),
               filled: true,
               fillColor: fillColor,
@@ -106,23 +107,23 @@ class _CustomTextFieldState extends State<CustomTextField> {
                     )
                   : widget.suffixWidget,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(55),
+                borderRadius: BorderRadius.circular(AppRadius.large),
                 borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(55),
+                borderRadius: BorderRadius.circular(AppRadius.large),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(55),
+                borderRadius: BorderRadius.circular(AppRadius.large),
                 borderSide: BorderSide(color: cs.primary, width: 1.5),
               ),
               errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(55),
+                borderRadius: BorderRadius.circular(AppRadius.large),
                 borderSide: BorderSide(color: cs.error, width: 1.5),
               ),
               focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(55),
+                borderRadius: BorderRadius.circular(AppRadius.large),
                 borderSide: BorderSide(color: cs.error, width: 1.5),
               ),
             ),
