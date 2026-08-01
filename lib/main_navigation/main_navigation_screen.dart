@@ -223,7 +223,7 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isActive = index == current;
-    final color = isActive ? cs.primary : cs.onSurface.withOpacity(0.35);
+    final color = isActive ? cs.primary : cs.onSurface.withValues(alpha: 0.35);
 
     return GestureDetector(
       onTap: () => onTap(index),
@@ -231,7 +231,7 @@ class _NavItem extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: isActive ? cs.primary.withOpacity(0.08) : Colors.transparent,
+          color: isActive ? cs.primary.withValues(alpha: 0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(

@@ -41,7 +41,7 @@ class CampaignCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -67,7 +67,7 @@ class CampaignCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: cs.surface.withOpacity(0.9),
+                    color: cs.surface.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -111,7 +111,7 @@ class CampaignCard extends StatelessWidget {
                       'progress'.tr(),
                       style: TextStyle(
                         fontSize: 12,
-                        color: cs.onSurface.withOpacity(0.6),
+                        color: cs.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     Text(
@@ -151,7 +151,7 @@ class CampaignCard extends StatelessWidget {
                           'goal'.tr(),
                           style: TextStyle(
                             fontSize: 10,
-                            color: cs.onSurface.withOpacity(0.6),
+                            color: cs.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                         Text(
@@ -196,7 +196,7 @@ class CampaignCard extends StatelessWidget {
         height: 150,
         width: double.infinity,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => errorWidget,
+        errorBuilder: (_, _, _) => errorWidget,
       );
     }
 
@@ -205,7 +205,7 @@ class CampaignCard extends StatelessWidget {
       height: 150,
       width: double.infinity,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => errorWidget,
+      errorBuilder: (_, _, _) => errorWidget,
     );
   }
 }

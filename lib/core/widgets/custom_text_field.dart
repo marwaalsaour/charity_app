@@ -49,7 +49,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final labelColor = cs.onSurface;
-    final iconColor = _focused ? cs.primary : cs.onSurface.withOpacity(0.4);
+    final iconColor = _focused ? cs.primary : cs.onSurface.withValues(alpha: 0.4);
     final fillColor = isDark
         ? AppColors.darkInputFill
         : AppColors.lightInputFill;
@@ -62,7 +62,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: iconColor,
+            color: labelColor,
           ),
         ),
         const SizedBox(height: 6),
@@ -100,7 +100,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
                   ? IconButton(
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: cs.onSurface.withOpacity(0.4),
+                        color: cs.onSurface.withValues(alpha: 0.4),
                         size: 20,
                       ),
                       onPressed: () => setState(() => _obscure = !_obscure),

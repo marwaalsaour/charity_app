@@ -51,7 +51,7 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                     campaign.imageUrl,
                     height: 220,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       height: 220,
                       color: cs.primary.withValues(alpha: 0.1),
                       child: Icon(Icons.campaign, size: 56, color: cs.primary),

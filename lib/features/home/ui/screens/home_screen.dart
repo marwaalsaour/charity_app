@@ -40,8 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      drawerScrimColor: Colors.black.withOpacity(0.6),
-      backgroundColor: cs.background,
+      drawerScrimColor: Colors.black.withValues(alpha: 0.6),
+      backgroundColor: cs.surface,
       drawer: const AppDrawer(),
 
       body: BlocBuilder<HomeCubit, HomeState>(
@@ -273,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       'welcome_back'.tr(),
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 11,
                       ),
                     ),
@@ -403,7 +403,7 @@ class AppDrawer extends StatelessWidget {
                     style: TextStyle(color: cs.onSurface),
                   ),
                   value: isDarkMode,
-                  activeColor: AppColors.accent,
+                  activeThumbColor: AppColors.accent,
                   onChanged: (_) => context.read<ThemeCubit>().toggle(),
                 );
               },
@@ -425,7 +425,7 @@ class AppDrawer extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.1),
+                  color: cs.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

@@ -46,7 +46,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: cs.onSurface.withOpacity(0.2),
+                  color: cs.onSurface.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -62,7 +62,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
               const SizedBox(height: 12),
               ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: cs.primary.withOpacity(0.1),
+                  backgroundColor: cs.primary.withValues(alpha: 0.1),
                   child: Icon(Icons.camera_alt, color: cs.primary),
                 ),
                 title: Text('Camera', style: TextStyle(color: cs.onSurface)),
@@ -70,7 +70,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
               ),
               ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: cs.primary.withOpacity(0.1),
+                  backgroundColor: cs.primary.withValues(alpha: 0.1),
                   child: Icon(Icons.photo_library, color: cs.primary),
                 ),
                 title: Text('Gallery', style: TextStyle(color: cs.onSurface)),
@@ -79,7 +79,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
               if (_image != null)
                 ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: cs.error.withOpacity(0.1),
+                    backgroundColor: cs.error.withValues(alpha: 0.1),
                     child: Icon(Icons.delete_outline, color: cs.error),
                   ),
                   title: Text(
@@ -159,7 +159,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: cs.primary.withOpacity(0.08),
+            color: cs.primary.withValues(alpha: 0.08),
             shape: BoxShape.circle,
           ),
           child: Icon(Icons.cloud_upload_outlined, color: cs.primary, size: 28),
@@ -176,7 +176,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
         const SizedBox(height: 4),
         Text(
           widget.supportedFormats,
-          style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.4)),
+          style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.4)),
         ),
       ],
     );

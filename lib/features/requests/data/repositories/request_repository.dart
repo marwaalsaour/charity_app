@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/request_model.dart';
 
 class RequestRepository {
@@ -7,7 +9,7 @@ class RequestRepository {
       // محاكاة الاتصال بالسيرفر
       await Future.delayed(const Duration(seconds: 2));
 
-      print("Sending Request Type: ${request.type} to Server...");
+      debugPrint('Sending Request Type: ${request.type} to Server...');
 
       /*
       مثال باستخدام Dio لرفع البيانات والملفات:

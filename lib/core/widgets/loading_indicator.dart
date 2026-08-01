@@ -50,7 +50,7 @@ class FullScreenLoading extends StatelessWidget {
             Text(
               message!,
               style: TextStyle(
-                color: cs.onSurface.withOpacity(0.6),
+                color: cs.onSurface.withValues(alpha: 0.6),
                 fontSize: 14,
               ),
             ),
@@ -107,7 +107,7 @@ class _ShimmerCardState extends State<ShimmerCard>
 
     return AnimatedBuilder(
       animation: _anim,
-      builder: (_, __) => Container(
+      builder: (_, _) => Container(
         height: widget.height,
         width: widget.width ?? double.infinity,
         decoration: BoxDecoration(

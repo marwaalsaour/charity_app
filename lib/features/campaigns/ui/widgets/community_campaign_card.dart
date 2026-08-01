@@ -54,7 +54,7 @@ class CommunityCampaignCard extends StatelessWidget {
                   campaign.imageUrl,
                   height: 170,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, _, _) => Container(
                     height: 170,
                     color: cs.primary.withValues(alpha: 0.1),
                     child: Icon(Icons.campaign_outlined, color: cs.primary, size: 48),
