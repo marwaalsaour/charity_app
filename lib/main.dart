@@ -2,26 +2,34 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'core/auth/user_role.dart';
 import 'core/auth/user_role_cubit.dart';
 import 'core/constants/app_theme/app_theme.dart';
 import 'core/constants/app_theme/theme_cubit.dart';
 import 'core/constants/app_theme/theme_state.dart';
 import 'core/router/app_router.dart';
+import 'core/services/firebase_bootstrap.dart';
 import 'features/home/logic/home_cubit.dart';
+import 'features/notifications/logic/notifications_cubit.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
 
-  // تحميل الثيم المحفوظ قبل تشغيل التطبيق
   final prefs = await SharedPreferences.getInstance();
   final savedTheme = prefs.getString('theme_mode');
   final initialMode = savedTheme == 'dark' ? ThemeMode.dark : ThemeMode.light;
 
+  await initializeFirebaseApp();
+  final savedRole = prefs.getString('user_role');
+  final role = UserRole.fromString(savedRole)?.name ?? UserRole.donor.name;
+  await bootstrapFirebase(role: role);
+
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('en'), Locale('ar')],
-      path: 'assets/translations', // مجلد ملفات الترجمة
+      path: 'assets/translations',
       fallbackLocale: const Locale('en'),
       child: AtaaApp(initialThemeMode: initialMode),
     ),
@@ -39,6 +47,7 @@ class AtaaApp extends StatelessWidget {
         BlocProvider(create: (_) => ThemeCubit(initialMode: initialThemeMode)),
         BlocProvider(create: (_) => UserRoleCubit()..loadRole()),
         BlocProvider(create: (_) => HomeCubit()),
+        BlocProvider(create: (_) => NotificationsCubit()),
       ],
       child: BlocBuilder<ThemeCubit, ThemeState>(
         builder: (context, themeState) {
@@ -49,7 +58,6 @@ class AtaaApp extends StatelessWidget {
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themeState.mode,
-
             locale: context.locale,
             supportedLocales: context.supportedLocales,
             localizationsDelegates: context.localizationDelegates,

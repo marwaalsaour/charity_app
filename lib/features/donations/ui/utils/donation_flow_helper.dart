@@ -7,6 +7,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_receipt_model.dart';
 import '../../data/repositories/donation_receipt_repository.dart';
+import '../../../notifications/data/notification_helper.dart';
 
 void openDonateAmountScreen(BuildContext context, DonationCheckoutArgs args) {
   context.push(AppRoutes.donateAmount, extra: args);
@@ -68,6 +69,11 @@ Future<DonationReceiptModel?> completeDonation({
   );
 
   await DonationReceiptRepository().saveReceipt(receipt);
+  await NotificationHelper.notifyDonationSuccess(
+    amount: amount,
+    currency: currency,
+    causeTitle: causeTitle,
+  );
   if (!context.mounted) return null;
 
   context.push(AppRoutes.donationReceipt, extra: receipt);
