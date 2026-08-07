@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:charity_app/core/constants/app_colors.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -8,8 +11,11 @@ import '../../../../core/constants/app_theme/theme_cubit.dart';
 import '../../../../core/constants/app_theme/theme_state.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/custom_button.dart';
+import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../donations/data/models/donation_checkout_args.dart';
 import '../../../donations/ui/utils/donation_flow_helper.dart';
+import '../../../profile/data/models/user_profile_model.dart';
+import '../../../profile/data/repositories/user_profile_repository.dart';
 import '../../data/models/campaign_model.dart';
 import '../../data/models/search_suggestion.dart';
 import '../../logic/home_cubit.dart';
@@ -29,10 +35,33 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  UserProfileModel? _profile;
+
   @override
   void initState() {
     super.initState();
+    // HomeCubit may already be loaded (app start / kept-alive tab).
     context.read<HomeCubit>().loadHome();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final local = await UserProfileRepository().getProfile();
+    if (mounted && local != null) {
+      setState(() => _profile = local);
+    }
+
+    final remote = await AuthRepository().syncProfile();
+    if (mounted && remote != null) {
+      setState(() => _profile = remote);
+    }
+  }
+
+  String get _displayName {
+    if (_profile != null && _profile!.hasName) {
+      return _profile!.fullName;
+    }
+    return 'donor_mock_name'.tr();
   }
 
   @override
@@ -81,9 +110,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBody(BuildContext context, HomeLoaded state) {
     final cs = Theme.of(context).colorScheme;
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _buildHeader(context, state)),
+    return RefreshIndicator(
+      color: cs.primary,
+      onRefresh: () => context.read<HomeCubit>().refresh(),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(child: _buildHeader(context, state)),
 
         SliverToBoxAdapter(
           child: Container(
@@ -132,6 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     context,
                     DonationCheckoutArgs(
                       causeTitle: 'quick_donate'.tr(),
+                        targetType: DonationTargetType.association,
                     ),
                   ),
                   label: 'quick_donate'.tr(),
@@ -169,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // 🏷 Campaigns
                 SizedBox(
-                  height: 310,
+                  height: CampaignCard.cardHeight + 8,
                   child: state.filteredCampaigns.isEmpty
                       ? Center(
                           child: Text(
@@ -181,25 +215,39 @@ class _HomeScreenState extends State<HomeScreen> {
                         )
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.only(left: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: state.filteredCampaigns.length,
                           itemBuilder: (context, i) {
                             final campaign = state.filteredCampaigns[i];
 
                             return CampaignCard(
-                              title: campaign.titleKey.tr(),
+                              title: campaign.linkedDonation?.cardTitle ??
+                                  campaign.titleKey.tr(),
                               category: campaign.categoryLabelKey.tr(),
                               image: campaign.imageUrl,
                               progress: campaign.progress,
                               progressPercent: campaign.progressPercent,
                               goal: campaign.formattedGoal,
-                              onTap: () => _openCampaignDetails(context, campaign),
-                              onDonateTap: () => openDonateAmountScreen(
-                                context,
-                                DonationCheckoutArgs(
-                                  causeTitle: campaign.titleKey.tr(),
-                                ),
-                              ),
+                              donation: campaign.linkedDonation,
+                              onTap: () =>
+                                  _openCampaignDetails(context, campaign),
+                              onDonateTap: () {
+                                final linked = campaign.linkedDonation;
+                                openDonateAmountScreen(
+                                  context,
+                                  DonationCheckoutArgs(
+                                    causeTitle: linked?.cardTitle ??
+                                        campaign.titleKey.tr(),
+                                    targetType: linked?.donateTargetType ??
+                                        DonationTargetType.association,
+                                    targetId: linked != null &&
+                                            linked.donateTargetType ==
+                                                DonationTargetType.request
+                                        ? linked.id
+                                        : null,
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -211,6 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -260,35 +309,33 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Colors.white,
-                  child: Icon(Icons.person, color: Colors.blue),
-                ),
+                _HomeProfileAvatar(imagePath: _profile?.imagePath),
                 const SizedBox(width: 12),
 
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'welcome_back'.tr(),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 11,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'welcome_back'.tr(),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                    const Text(
-                      'Marwa Alsaour',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                      Text(
+                        _displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-
-                const Spacer(),
 
                 Builder(
                   builder: (ctx) => IconButton(
@@ -325,6 +372,37 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+}
+
+class _HomeProfileAvatar extends StatelessWidget {
+  const _HomeProfileAvatar({this.imagePath});
+
+  final String? imagePath;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 26,
+      backgroundColor: Colors.white,
+      backgroundImage: _imageProvider,
+      child: _imageProvider == null
+          ? Icon(Icons.person, color: Theme.of(context).colorScheme.primary)
+          : null,
+    );
+  }
+
+  ImageProvider? get _imageProvider {
+    final path = imagePath?.trim();
+    if (path == null || path.isEmpty) return null;
+
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return CachedNetworkImageProvider(path);
+    }
+
+    final file = File(path);
+    if (file.existsSync()) return FileImage(file);
+    return null;
   }
 }
 

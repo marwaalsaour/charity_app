@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
 import '../widgets/request_card.dart';
@@ -9,18 +10,24 @@ import '../widgets/request_card.dart';
 class RequestSheet extends StatelessWidget {
   const RequestSheet({super.key});
 
+  void _openRequest(BuildContext context, String route) {
+    // Capture router before closing the sheet — sheet context is invalid after pop.
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.push(route);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.78,
       decoration: BoxDecoration(
-        color: ext.cardBackground,
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(28),
-        ),
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -58,27 +65,20 @@ class RequestSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-                Container(
+                Image.asset(
+                  'assets/image/logo-green.png',
                   width: 76,
                   height: 76,
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.volunteer_activism,
-                    color: cs.primary,
-                    size: 40,
-                  ),
+                  fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  'request_sheet_heading'.tr(),
+                  'how_help_today'.tr(),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: cs.primary,
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -96,30 +96,24 @@ class RequestSheet extends StatelessWidget {
                   icon: Icons.medical_services_rounded,
                   title: 'medical'.tr(),
                   subtitle: 'medical_desc'.tr(),
-                  onRequest: () {
-                    Navigator.pop(context);
-                    context.push(AppRoutes.medicalRequest);
-                  },
+                  onRequest: () =>
+                      _openRequest(context, AppRoutes.medicalRequest),
                 ),
                 const SizedBox(height: 14),
                 RequestCard(
                   icon: Icons.school_rounded,
                   title: 'education'.tr(),
                   subtitle: 'education_desc'.tr(),
-                  onRequest: () {
-                    Navigator.pop(context);
-                    context.push(AppRoutes.educationRequest);
-                  },
+                  onRequest: () =>
+                      _openRequest(context, AppRoutes.educationRequest),
                 ),
                 const SizedBox(height: 14),
                 RequestCard(
                   icon: Icons.favorite_rounded,
                   title: 'orphans'.tr(),
                   subtitle: 'orphans_desc'.tr(),
-                  onRequest: () {
-                    Navigator.pop(context);
-                    context.push(AppRoutes.orphanRequest);
-                  },
+                  onRequest: () =>
+                      _openRequest(context, AppRoutes.orphanRequest),
                 ),
                 const SizedBox(height: 8),
               ],

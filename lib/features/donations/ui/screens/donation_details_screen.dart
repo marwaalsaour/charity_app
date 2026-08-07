@@ -6,35 +6,92 @@ import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/utils/share_link_helper.dart';
 import '../../../../core/widgets/custom_button.dart';
+import '../../data/donation_stats_enricher.dart';
 import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
 import '../utils/donation_flow_helper.dart';
+import '../widgets/case_verification_info.dart';
 import '../widgets/donation_cover_image.dart';
 import 'education_donation_details_screen.dart';
 import 'medical_donation_details_screen.dart';
 
-class DonationDetailsScreen extends StatelessWidget {
+class DonationDetailsScreen extends StatefulWidget {
   final DonationModel donation;
 
   const DonationDetailsScreen({super.key, required this.donation});
 
   @override
+  State<DonationDetailsScreen> createState() => _DonationDetailsScreenState();
+}
+
+class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
+  late DonationModel _donation;
+  var _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _donation = widget.donation;
+    _refreshStats();
+  }
+
+  Future<void> _refreshStats() async {
+    final enriched = await enrichDonationWithLocalStats(widget.donation);
+    if (!mounted) return;
+    setState(() {
+      _donation = enriched;
+      _loading = false;
+    });
+  }
+
+  Future<void> _onDonate() async {
+    await openDonateAmountScreen(
+      context,
+      DonationCheckoutArgs(
+        causeTitle: _donation.cardTitle,
+        targetType: _donation.donateTargetType,
+        targetId: _donation.id,
+      ),
+    );
+    if (mounted) await _refreshStats();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    switch (donation.category) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    switch (_donation.category) {
       case DonationCategory.education:
-        return EducationDonationDetailsScreen(donation: donation);
+        return EducationDonationDetailsScreen(
+          donation: _donation,
+          onDonate: _onDonate,
+        );
       case DonationCategory.medical:
-        return MedicalDonationDetailsScreen(donation: donation);
+        return MedicalDonationDetailsScreen(
+          donation: _donation,
+          onDonate: _onDonate,
+        );
       case DonationCategory.orphans:
-        return _StandardDonationDetailsScreen(donation: donation);
+        return _StandardDonationDetailsScreen(
+          donation: _donation,
+          onDonate: _onDonate,
+        );
     }
   }
 }
 
 class _StandardDonationDetailsScreen extends StatelessWidget {
-  const _StandardDonationDetailsScreen({required this.donation});
+  const _StandardDonationDetailsScreen({
+    required this.donation,
+    required this.onDonate,
+  });
 
   final DonationModel donation;
+  final Future<void> Function() onDonate;
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +100,8 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
     final cs = theme.colorScheme;
     final ext = theme.extension<AppThemeExtension>()!;
     final percent = (donation.progress * 100).round();
-    final donors = (donation.raised / 30).round().clamp(12, 999);
-    final daysLeft = (35 - donation.id * 4).clamp(5, 60);
+    final donors = donation.donorCount;
+    final daysLeft = donation.daysLeft;
 
     return Scaffold(
       appBar: AppBar(
@@ -80,7 +137,7 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
                   _CategoryBadge(label: donation.category.titleKey.tr()),
                   const SizedBox(height: 12),
                   Text(
-                    donation.nameKey.tr(),
+                    donation.cardTitle,
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
@@ -90,7 +147,7 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    donation.titleKey.tr(),
+                    donation.displayTitle,
                     style: TextStyle(
                       fontSize: 15,
                       color: ext.textSecondary,
@@ -105,11 +162,15 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
                     donors: donors,
                     daysLeft: daysLeft,
                   ),
+                  if (donation.hasVerificationInfo) ...[
+                    const SizedBox(height: 16),
+                    CaseVerificationInfo(donation: donation),
+                  ],
                   const SizedBox(height: 28),
                   _SectionHeader(title: 'the_story'.tr()),
                   const SizedBox(height: 12),
                   Text(
-                    donation.descriptionKey.tr(),
+                    donation.displayDescription,
                     style: TextStyle(
                       fontSize: 15,
                       color: ext.textSecondary,
@@ -139,10 +200,7 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
                 variant: ButtonVariant.accent,
                 icon: Icons.favorite_rounded,
                 height: 54,
-                onTap: () => openDonateAmountScreen(
-                  context,
-                  DonationCheckoutArgs(causeTitle: donation.nameKey.tr()),
-                ),
+                onTap: onDonate,
               ),
             ),
           ),
@@ -197,69 +255,40 @@ class _ProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final cs = theme.colorScheme;
-    final ext = theme.extension<AppThemeExtension>()!;
-    final goalText = '\$${goal.toInt()}';
+    final cs = Theme.of(context).colorScheme;
+    final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: ext.cardBackground,
         borderRadius: BorderRadius.circular(AppRadius.large),
         border: Border.all(color: ext.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '\$${raised.toInt()}',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'raised_of_goal'.tr(namedArgs: {'goal': goalText}),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: ext.textSecondary,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
+              Text(
+                '\$${raised.toInt()}',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
                 ),
               ),
               Text(
                 '$percent%',
                 style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.accentDark,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
@@ -269,19 +298,19 @@ class _ProgressCard extends StatelessWidget {
               color: ext.progressFill,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: _StatItem(
-                  value: '$donors',
-                  label: 'donor_count'.tr(),
-                ),
+                child: _MiniStat(value: '$donors', label: 'donor_count'.tr()),
               ),
               Expanded(
-                child: _StatItem(
-                  value: '$daysLeft',
-                  label: 'days_left'.tr(),
+                child: _MiniStat(value: '$daysLeft', label: 'days_left'.tr()),
+              ),
+              Expanded(
+                child: _MiniStat(
+                  value: '\$${goal.toInt()}',
+                  label: 'goal'.tr(),
                 ),
               ),
             ],
@@ -292,8 +321,8 @@ class _ProgressCard extends StatelessWidget {
   }
 }
 
-class _StatItem extends StatelessWidget {
-  const _StatItem({required this.value, required this.label});
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({required this.value, required this.label});
 
   final String value;
   final String label;
@@ -308,20 +337,15 @@ class _StatItem extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: FontWeight.w800,
             color: cs.onSurface,
           ),
         ),
         const SizedBox(height: 2),
         Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: ext.textSecondary,
-            letterSpacing: 0.4,
-          ),
+          label,
+          style: TextStyle(fontSize: 11, color: ext.textSecondary),
         ),
       ],
     );
@@ -335,29 +359,13 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            color: AppColors.accent,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title.toUpperCase(),
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: cs.onSurface,
-            letterSpacing: 0.8,
-          ),
-        ),
-      ],
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
     );
   }
 }

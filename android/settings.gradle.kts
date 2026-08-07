@@ -11,13 +11,22 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        maven { url = uri("https://storage.flutter-io.cn/download.flutter.io") }
         google()
-        mavenCentral()
+        // Do NOT use mavenCentral() — it points to repo.maven.apache.org which fails DNS here.
+        maven { url = uri("https://repo1.maven.org/maven2/") }
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
         gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        maven { url = uri("https://repo1.maven.org/maven2/") }
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        maven { url = uri("https://storage.flutter-io.cn/download.flutter.io") }
     }
 }
 

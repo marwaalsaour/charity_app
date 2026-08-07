@@ -11,6 +11,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/image_upload_box.dart';
+import '../../data/models/register_params.dart';
 import '../../logic/register_cubit.dart';
 import '../../logic/register_state.dart';
 import '../widgets/auth_method_toggle.dart';
@@ -41,15 +42,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   File? _profileImage;
   File? _documentImage;
+  DateTime? _dateOfBirth;
   int _selectedDoc = -1;
   int _selectedMethod = 0;
   int _currentStep = 1;
 
+  DateTime get _maxBirthDate {
+    final now = DateTime.now();
+    return DateTime(now.year - 18, now.month, now.day);
+  }
+
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _dateController.text = '${now.day}/${now.month}/${now.year}';
+    _dateOfBirth = _maxBirthDate;
+    _dateController.text =
+        '${_maxBirthDate.day}/${_maxBirthDate.month}/${_maxBirthDate.year}';
   }
 
   @override
@@ -72,14 +80,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _dateOfBirth ?? _maxBirthDate,
       firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
+      lastDate: _maxBirthDate,
     );
     if (picked != null) {
-      _dateController.text = '${picked.day}/${picked.month}/${picked.year}';
-      setState(() {});
+      setState(() {
+        _dateOfBirth = picked;
+        _dateController.text = '${picked.day}/${picked.month}/${picked.year}';
+      });
     }
+  }
+
+  String? _nameValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'auth_field_required'.tr();
+    }
+    if (!RegExp(r'^[^\d\s,]+$').hasMatch(value.trim())) {
+      return 'auth_name_invalid'.tr();
+    }
+    return null;
   }
 
   @override
@@ -141,8 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 label: 'auth_first_name'.tr(),
                 hint: 'auth_first_name_hint'.tr(),
                 prefixIcon: Icons.person_outline,
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'auth_field_required'.tr() : null,
+                validator: _nameValidator,
               ),
             ),
             const SizedBox(width: 10),
@@ -152,8 +171,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 label: 'auth_last_name'.tr(),
                 hint: 'auth_last_name_hint'.tr(),
                 prefixIcon: Icons.person_outline,
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'auth_field_required'.tr() : null,
+                validator: _nameValidator,
               ),
             ),
           ],
@@ -184,6 +202,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Icons.calendar_today,
             color: AppColors.primary,
           ),
+          validator: (_) {
+            if (_dateOfBirth == null) return 'auth_field_required'.tr();
+            if (_dateOfBirth!.isAfter(_maxBirthDate)) {
+              return 'auth_error_underage'.tr();
+            }
+            return null;
+          },
         ),
         const SizedBox(height: 20),
         CustomTextField(
@@ -191,6 +216,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           hint: 'auth_address_hint'.tr(),
           controller: _addressController,
           prefixIcon: Icons.location_on_outlined,
+          validator: (v) =>
+              v == null || v.trim().isEmpty ? 'auth_field_required'.tr() : null,
         ),
         const SizedBox(height: 30),
         AuthSectionTitle(titleKey: 'auth_profile_photo'),
@@ -313,9 +340,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
               );
               context.go(_loginRoute);
             } else if (state is RegisterError) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(state.message.tr())));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.message.tr())),
+              );
             }
           },
           builder: (context, state) {
@@ -328,13 +355,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ? null
                   : () {
                       if (!_formKey.currentState!.validate()) return;
+                      if (_profileImage == null ||
+                          _documentImage == null ||
+                          _dateOfBirth == null) {
+                        return;
+                      }
+
+                      final usePhone = _selectedMethod == 0;
                       context.read<RegisterCubit>().register(
-                        firstName: _firstNameController.text,
-                        lastName: _lastNameController.text,
-                        phone: _phoneController.text,
-                        email: _emailController.text,
-                        password: _passwordController.text,
-                      );
+                            RegisterParams(
+                              firstName: _firstNameController.text,
+                              lastName: _lastNameController.text,
+                              phone: usePhone
+                                  ? _phoneController.text.trim()
+                                  : null,
+                              email: usePhone
+                                  ? null
+                                  : _emailController.text.trim(),
+                              password: _passwordController.text,
+                              passwordConfirmation:
+                                  _confirmPasswordController.text,
+                              address: _addressController.text,
+                              dateOfBirth: _dateOfBirth!,
+                              profileImage: _profileImage!,
+                              nationalIdImage:
+                                  _selectedDoc == 0 ? _documentImage : null,
+                              passportImage:
+                                  _selectedDoc == 1 ? _documentImage : null,
+                              role: widget.role,
+                            ),
+                          );
                     },
             );
           },

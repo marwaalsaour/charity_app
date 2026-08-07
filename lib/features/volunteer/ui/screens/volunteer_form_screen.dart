@@ -9,6 +9,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/document_upload_box.dart';
+import '../../../notifications/data/notification_helper.dart';
 import '../../data/volunteer_constants.dart';
 
 class VolunteerFormScreen extends StatefulWidget {
@@ -101,6 +102,9 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
         ],
       ),
     );
+
+    // Fire-and-forget donor inbox notification.
+    NotificationHelper.notifyVolunteerSubmitted();
   }
 
   void _showError(String key) {

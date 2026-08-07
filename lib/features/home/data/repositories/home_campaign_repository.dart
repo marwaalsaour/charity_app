@@ -16,26 +16,33 @@ class HomeCampaignRepository {
   final CommunityCampaignRepository _communityCampaignRepository;
 
   Future<List<CampaignModel>> getRecentCampaigns() async {
-    final results = await Future.wait([
-      _donationRepository.getDonations(DonationCategory.education),
-      _donationRepository.getDonations(DonationCategory.medical),
-      _donationRepository.getDonations(DonationCategory.orphans),
-      _communityCampaignRepository.getCampaigns(),
-    ]);
+    final accepted = await _donationRepository.getAllOpenAccepted();
+    final community = await _communityCampaignRepository.getCampaigns();
 
-    final donations = [
-      ...results[0] as List<DonationModel>,
-      ...results[1] as List<DonationModel>,
-      ...results[2] as List<DonationModel>,
-    ]..sort((a, b) => b.id.compareTo(a.id));
+    final donations = <DonationModel>[];
+    if (accepted != null && accepted.isNotEmpty) {
+      // Real approved cases for donors — first cards in "Recent campaigns".
+      donations.addAll(accepted);
+    } else if (accepted == null) {
+      // API unavailable and no cache: keep demo mocks so home is not blank.
+      final mocks = await Future.wait([
+        _donationRepository.getDonations(DonationCategory.education),
+        _donationRepository.getDonations(DonationCategory.medical),
+        _donationRepository.getDonations(DonationCategory.orphans),
+      ]);
+      for (final list in mocks) {
+        donations.addAll(list);
+      }
+    }
 
-    final community = List<CommunityCampaignModel>.from(
-      results[3] as List<CommunityCampaignModel>,
-    )..sort((a, b) => b.id.compareTo(a.id));
+    donations.sort((a, b) => b.id.compareTo(a.id));
+
+    final communitySorted = List<CommunityCampaignModel>.from(community)
+      ..sort((a, b) => b.id.compareTo(a.id));
 
     return [
       ...donations.map(CampaignModel.fromDonation),
-      ...community.map(CampaignModel.fromCommunity),
+      ...communitySorted.map(CampaignModel.fromCommunity),
     ];
   }
 }

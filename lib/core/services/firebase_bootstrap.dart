@@ -25,8 +25,8 @@ Future<bool> initializeFirebaseApp() async {
 }
 
 Future<void> bootstrapFirebase({required String role}) async {
-  if (!NotificationRepository.firebaseReady) return;
   try {
+    // Always init local notifications; FCM runs only when Firebase is ready.
     await NotificationService.instance.init(role: role);
   } catch (e, stack) {
     debugPrint('NotificationService init failed: $e\n$stack');

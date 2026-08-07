@@ -63,7 +63,10 @@ class CommunityCampaignsScreen extends StatelessWidget {
                   ),
                   onDonate: () => openDonateAmountScreen(
                     context,
-                    DonationCheckoutArgs(causeTitle: campaign.titleKey.tr()),
+                    DonationCheckoutArgs(
+                      causeTitle: campaign.titleKey.tr(),
+                      targetType: DonationTargetType.association,
+                    ),
                   ),
                 ),
               ),

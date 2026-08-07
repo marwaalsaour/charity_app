@@ -1,37 +1,164 @@
+import 'dart:io';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/image_upload_box.dart';
+import '../../data/models/benefit_request_models.dart';
 import '../../logic/cubit/request_cubit.dart';
 import '../../logic/states/request_state.dart';
 import '../widgets/request_form_card.dart';
+import '../widgets/request_location_fields.dart';
+import '../widgets/show_name_consent_tile.dart';
 
-class EducationRequestPage extends StatelessWidget {
-  EducationRequestPage({super.key});
+class EducationRequestPage extends StatefulWidget {
+  const EducationRequestPage({super.key});
 
+  @override
+  State<EducationRequestPage> createState() => _EducationRequestPageState();
+}
+
+class _EducationRequestPageState extends State<EducationRequestPage> {
   final uniName = TextEditingController();
-  final uniMotherName = TextEditingController();
+  final uniNationalId = TextEditingController();
+  final uniUniversity = TextEditingController();
   final uniYear = TextEditingController();
   final uniDesc = TextEditingController();
 
   final schoolName = TextEditingController();
-  final schoolMotherName = TextEditingController();
+  final schoolNationalId = TextEditingController();
   final schoolGrade = TextEditingController();
   final schoolTitle = TextEditingController();
-  final schoolAddress = TextEditingController();
   final schoolDesc = TextEditingController();
+
+  File? universityIdPhoto;
+  File? familyBookPhoto;
+  bool showBeneficiaryName = false;
+
+  @override
+  void dispose() {
+    uniName.dispose();
+    uniNationalId.dispose();
+    uniUniversity.dispose();
+    uniYear.dispose();
+    uniDesc.dispose();
+    schoolName.dispose();
+    schoolNationalId.dispose();
+    schoolGrade.dispose();
+    schoolTitle.dispose();
+    schoolDesc.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final cubit = context.read<RequestCubit>();
+    final state = cubit.state;
+
+    if (state.selectedGovernorateId == null || state.selectedCityId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('request_fill_required'.tr())),
+      );
+      return;
+    }
+
+    final bool ok;
+    if (state.educationType == 0) {
+      if (uniName.text.trim().isEmpty ||
+          uniNationalId.text.trim().isEmpty ||
+          uniYear.text.trim().isEmpty ||
+          uniDesc.text.trim().isEmpty ||
+          universityIdPhoto == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('request_fill_required'.tr())),
+        );
+        return;
+      }
+      ok = await cubit.submitBenefitRequest(
+        BenefitRequestSubmitParams(
+          kind: BenefitRequestKind.university,
+          fullName: uniName.text,
+          nationalId: uniNationalId.text,
+          governorateId: state.selectedGovernorateId!,
+          regionId: state.selectedCityId!,
+          description: uniDesc.text,
+          academicYear: uniYear.text,
+          universityName: uniUniversity.text,
+          supportType: cubit.supportTypeApiValue,
+          universityIdPhoto: universityIdPhoto,
+          showBeneficiaryName: showBeneficiaryName,
+        ),
+      );
+    } else {
+      if (schoolName.text.trim().isEmpty ||
+          schoolNationalId.text.trim().isEmpty ||
+          schoolGrade.text.trim().isEmpty ||
+          schoolTitle.text.trim().isEmpty ||
+          schoolDesc.text.trim().isEmpty ||
+          familyBookPhoto == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('request_fill_required'.tr())),
+        );
+        return;
+      }
+      ok = await cubit.submitBenefitRequest(
+        BenefitRequestSubmitParams(
+          kind: BenefitRequestKind.school,
+          fullName: schoolName.text,
+          nationalId: schoolNationalId.text,
+          governorateId: state.selectedGovernorateId!,
+          regionId: state.selectedCityId!,
+          description: schoolDesc.text,
+          academicGrade: schoolGrade.text,
+          schoolName: schoolTitle.text,
+          familyBookPhoto: familyBookPhoto,
+          showBeneficiaryName: showBeneficiaryName,
+        ),
+      );
+    }
+
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('request_submitted_success'.tr())),
+      );
+      context.pop();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_localizeSubmitError(cubit.state.submitError)),
+        ),
+      );
+    }
+  }
+
+  String _localizeSubmitError(String? error) {
+    final message = error ?? 'request_submit_failed';
+    if (RegExp(r'^[a-z0-9_]+$').hasMatch(message)) {
+      return message.tr();
+    }
+    return message;
+  }
 
   @override
   Widget build(BuildContext context) {
     final cubit = context.watch<RequestCubit>();
     final state = cubit.state;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(title: Text('education_request_title'.tr())),
+      backgroundColor:
+          isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      appBar: AppBar(
+        title: Text('education_request_title'.tr()),
+        backgroundColor:
+            isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
@@ -72,29 +199,7 @@ class EducationRequestPage extends StatelessWidget {
             label: 'submit_request'.tr(),
             icon: Icons.school,
             isLoading: state.isLoading,
-            onTap: () {
-              if (state.educationType == 0) {
-                cubit.submitForm(
-                  type: 'education',
-                  name: uniName.text,
-                  contact: '',
-                  address: '',
-                  note: uniDesc.text,
-                  grade: uniYear.text,
-                  institution: 'University',
-                );
-              } else {
-                cubit.submitForm(
-                  type: 'education',
-                  name: schoolName.text,
-                  contact: '',
-                  address: schoolAddress.text,
-                  note: schoolDesc.text,
-                  grade: schoolGrade.text,
-                  institution: schoolTitle.text,
-                );
-              }
-            },
+            onTap: _submit,
           ),
         ],
       ),
@@ -113,10 +218,18 @@ class EducationRequestPage extends StatelessWidget {
       ),
       const SizedBox(height: 16),
       CustomTextField(
-        label: 'mother_name'.tr(),
-        hint: 'enter_mother_name'.tr(),
-        prefixIcon: Icons.woman,
-        controller: uniMotherName,
+        label: 'national_id'.tr(),
+        hint: 'enter_national_id'.tr(),
+        prefixIcon: Icons.badge_outlined,
+        keyboardType: TextInputType.number,
+        controller: uniNationalId,
+      ),
+      const SizedBox(height: 16),
+      CustomTextField(
+        label: 'university_name'.tr(),
+        hint: 'university_name_hint'.tr(),
+        prefixIcon: Icons.account_balance,
+        controller: uniUniversity,
       ),
       const SizedBox(height: 16),
       CustomTextField(
@@ -129,8 +242,23 @@ class EducationRequestPage extends StatelessWidget {
       ImageUploadBox(
         label: 'university_id_photo'.tr(),
         hint: 'tap_upload'.tr(),
+        onImageSelected: (f) => setState(() => universityIdPhoto = f),
       ),
       const SizedBox(height: 16),
+      const RequestLocationFields(),
+      const SizedBox(height: 16),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(
+          'support_type'.tr(),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
       Wrap(
         spacing: 10,
         runSpacing: 8,
@@ -156,6 +284,11 @@ class EducationRequestPage extends StatelessWidget {
         maxLines: 4,
         controller: uniDesc,
       ),
+      const SizedBox(height: 8),
+      ShowNameConsentTile(
+        value: showBeneficiaryName,
+        onChanged: (v) => setState(() => showBeneficiaryName = v),
+      ),
     ];
   }
 
@@ -169,10 +302,11 @@ class EducationRequestPage extends StatelessWidget {
       ),
       const SizedBox(height: 16),
       CustomTextField(
-        label: 'mother_name'.tr(),
-        hint: 'enter_mother_name'.tr(),
-        prefixIcon: Icons.woman,
-        controller: schoolMotherName,
+        label: 'national_id'.tr(),
+        hint: 'enter_national_id'.tr(),
+        prefixIcon: Icons.badge_outlined,
+        keyboardType: TextInputType.number,
+        controller: schoolNationalId,
       ),
       const SizedBox(height: 16),
       CustomTextField(
@@ -189,16 +323,12 @@ class EducationRequestPage extends StatelessWidget {
         controller: schoolTitle,
       ),
       const SizedBox(height: 16),
-      CustomTextField(
-        label: 'address'.tr(),
-        hint: 'address_hint'.tr(),
-        prefixIcon: Icons.location_on,
-        controller: schoolAddress,
-      ),
+      const RequestLocationFields(),
       const SizedBox(height: 16),
       ImageUploadBox(
         label: 'family_book_photo'.tr(),
         hint: 'tap_upload'.tr(),
+        onImageSelected: (f) => setState(() => familyBookPhoto = f),
       ),
       const SizedBox(height: 16),
       CustomTextField(
@@ -206,6 +336,11 @@ class EducationRequestPage extends StatelessWidget {
         hint: 'describe_need'.tr(),
         maxLines: 4,
         controller: schoolDesc,
+      ),
+      const SizedBox(height: 8),
+      ShowNameConsentTile(
+        value: showBeneficiaryName,
+        onChanged: (v) => setState(() => showBeneficiaryName = v),
       ),
     ];
   }
@@ -227,18 +362,21 @@ class EducationRequestPage extends StatelessWidget {
         height: 96,
         decoration: BoxDecoration(
           color: selected
-              ? cs.primary.withValues(alpha: 0.1)
+              ? AppColors.primary.withValues(alpha: 0.12)
               : ext.cardBackground,
           border: Border.all(
-            color: selected ? cs.primary : ext.border,
+            color: selected ? AppColors.primary : ext.border,
             width: selected ? 2 : 1,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: selected ? cs.primary : ext.textSecondary),
+            Icon(
+              icon,
+              color: selected ? AppColors.primary : ext.textSecondary,
+            ),
             const SizedBox(height: 6),
             Text(
               title,
@@ -246,7 +384,7 @@ class EducationRequestPage extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected ? cs.primary : cs.onSurface,
+                color: selected ? AppColors.primary : cs.onSurface,
               ),
             ),
           ],
@@ -270,10 +408,10 @@ class EducationRequestPage extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? cs.primary : ext.inputFill,
+          color: selected ? AppColors.primary : ext.inputFill,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? cs.primary : ext.border,
+            color: selected ? AppColors.primary : ext.border,
           ),
         ),
         child: Text(

@@ -1,15 +1,20 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/user_role.dart';
+import '../../../../core/auth/user_role_cubit.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../donations/data/repositories/donation_receipt_repository.dart';
+import '../../../auth/data/repositories/auth_repository.dart';
+import '../../../requests/logic/cubit/request_cubit.dart';
+import '../../../requests/logic/states/request_state.dart';
 import '../../data/models/user_profile_model.dart';
 import '../../data/repositories/user_profile_repository.dart';
 
@@ -36,30 +41,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    if (!_isBeneficiary) {
-      _loadWallet();
-    }
     _loadProfile();
   }
 
-  Future<void> _loadWallet() async {
-    final receipts = await DonationReceiptRepository().getReceipts();
-    if (!mounted) return;
+  void _applyWalletFrom(UserProfileModel? profile) {
+    if (_isBeneficiary) return;
+    final wallet = profile?.primaryWallet ?? (amount: 0.0, currency: 'USD');
+    _walletBalance = wallet.amount;
+    _walletCurrency = wallet.currency;
+    _loadingWallet = false;
+  }
 
-    final total = receipts.fold<double>(0, (sum, r) => sum + r.amount);
+  Future<void> _loadWallet() async {
+    final remote = await AuthRepository().syncProfile();
+    final profile = remote ?? await _profileRepository.getProfile();
+    if (!mounted) return;
     setState(() {
-      _walletBalance = total;
-      _walletCurrency = receipts.isNotEmpty ? receipts.last.currency : 'USD';
-      _loadingWallet = false;
+      if (remote != null) _profile = remote;
+      _applyWalletFrom(profile);
     });
   }
 
   Future<void> _loadProfile() async {
-    final profile = await _profileRepository.getProfile();
+    final local = await _profileRepository.getProfile();
     if (!mounted) return;
     setState(() {
-      _profile = profile;
+      _profile = local;
       _loadingProfile = false;
+      _applyWalletFrom(local);
+    });
+
+    final remote = await AuthRepository().syncProfile();
+    if (!mounted || remote == null) return;
+    setState(() {
+      _profile = remote;
+      _applyWalletFrom(remote);
     });
   }
 
@@ -114,7 +130,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 24),
           if (_isBeneficiary)
-            const _BeneficiaryRequestsCard()
+            BlocBuilder<RequestCubit, RequestState>(
+              builder: (context, state) => _BeneficiaryRequestsCard(
+                count: state.myRequests
+                    .where((r) => r.isPending || r.isApproved)
+                    .length,
+              ),
+            )
           else
             _WalletCard(
               balance: _walletBalance,
@@ -161,7 +183,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 28),
           _LogoutButton(
-            onTap: () => context.go(widget.role.loginRoute),
+            onTap: () async {
+              await AuthRepository().logout();
+              if (!context.mounted) return;
+              await context.read<UserRoleCubit>().clearRole();
+              if (!context.mounted) return;
+              context.go(widget.role.loginRoute);
+            },
           ),
           const SizedBox(height: 32),
           Center(
@@ -301,23 +329,49 @@ class _AvatarSection extends StatelessWidget {
   }
 
   Widget _buildAvatarContent(ColorScheme cs) {
-    if (imagePath != null && File(imagePath!).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Image.file(
-          File(imagePath!),
-          width: 100,
-          height: 100,
-          fit: BoxFit.cover,
-        ),
-      );
+    final path = imagePath;
+    if (path == null || path.isEmpty) {
+      return Icon(Icons.person, size: 48, color: cs.primary);
     }
-    return Icon(Icons.person, size: 48, color: cs.primary);
+
+    final isNetwork =
+        path.startsWith('http://') || path.startsWith('https://');
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: isNetwork
+          ? CachedNetworkImage(
+              imageUrl: path,
+              width: 100,
+              height: 100,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Icon(
+                Icons.person,
+                size: 48,
+                color: cs.primary,
+              ),
+              errorWidget: (_, __, ___) => Icon(
+                Icons.person,
+                size: 48,
+                color: cs.primary,
+              ),
+            )
+          : File(path).existsSync()
+              ? Image.file(
+                  File(path),
+                  width: 100,
+                  height: 100,
+                  fit: BoxFit.cover,
+                )
+              : Icon(Icons.person, size: 48, color: cs.primary),
+    );
   }
 }
 
 class _BeneficiaryRequestsCard extends StatelessWidget {
-  const _BeneficiaryRequestsCard();
+  const _BeneficiaryRequestsCard({required this.count});
+
+  final int count;
 
   @override
   Widget build(BuildContext context) {
@@ -367,7 +421,7 @@ class _BeneficiaryRequestsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '2',
+                  '$count',
                   style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,

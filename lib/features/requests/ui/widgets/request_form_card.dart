@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 
 class RequestFormCard extends StatelessWidget {
@@ -15,7 +16,7 @@ class RequestFormCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: ext.cardBackground,
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: ext.border),
         boxShadow: [

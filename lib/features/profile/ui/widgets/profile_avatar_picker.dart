@@ -109,10 +109,23 @@ class ProfileAvatarPicker extends StatelessWidget {
     final borderColor = ext?.border ?? cs.outline;
 
     Widget avatarChild;
-    if (imagePath != null && File(imagePath!).existsSync()) {
+    final path = imagePath;
+    if (path != null &&
+        (path.startsWith('http://') || path.startsWith('https://'))) {
+      avatarChild = ClipOval(
+        child: Image.network(
+          path,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              Icon(Icons.person, size: size * 0.45, color: cs.primary),
+        ),
+      );
+    } else if (path != null && File(path).existsSync()) {
       avatarChild = ClipOval(
         child: Image.file(
-          File(imagePath!),
+          File(path),
           width: size,
           height: size,
           fit: BoxFit.cover,

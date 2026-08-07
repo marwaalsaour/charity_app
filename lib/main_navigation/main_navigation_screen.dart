@@ -44,7 +44,6 @@ class MainNavigationScreen extends StatelessWidget {
       }
     }
 
-    // Donation sub-routes belong to donor campaigns tab
     if (isDonor &&
         (location.startsWith(AppRoutes.donationsList) ||
             location.startsWith(AppRoutes.donationDetails) ||
@@ -68,7 +67,6 @@ class MainNavigationScreen extends StatelessWidget {
       currentIndex = 2;
     }
 
-    // Request form sub-routes belong to beneficiary requests tab
     if (!isDonor &&
         (location.startsWith(AppRoutes.medicalRequest) ||
             location.startsWith(AppRoutes.educationRequest) ||

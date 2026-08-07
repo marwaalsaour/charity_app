@@ -1,10 +1,10 @@
 allprojects {
     repositories {
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
-        maven { url = uri("https://storage.flutter-io.cn/download.flutter.io") }
         google()
-        mavenCentral()
+        maven { url = uri("https://repo1.maven.org/maven2/") }
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        maven { url = uri("https://storage.flutter-io.cn/download.flutter.io") }
     }
 }
 
@@ -18,6 +18,7 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

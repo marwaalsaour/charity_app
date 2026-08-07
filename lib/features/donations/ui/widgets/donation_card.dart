@@ -20,7 +20,13 @@ class DonationCard extends StatelessWidget {
   void _openDonate(BuildContext context) {
     openDonateAmountScreen(
       context,
-      DonationCheckoutArgs(causeTitle: donation.nameKey.tr()),
+      DonationCheckoutArgs(
+        causeTitle: donation.cardTitle,
+        targetType: donation.donateTargetType,
+        targetId: donation.donateTargetType == DonationTargetType.request
+            ? donation.id
+            : null,
+      ),
     );
   }
 
@@ -65,7 +71,7 @@ class DonationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        donation.nameKey.tr(),
+                        donation.cardTitle,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -74,7 +80,7 @@ class DonationCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        donation.titleKey.tr(),
+                        donation.displayTitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -84,7 +90,7 @@ class DonationCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        donation.descriptionKey.tr(),
+                        donation.displayDescription,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

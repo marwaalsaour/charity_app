@@ -1,20 +1,23 @@
 import 'dart:io';
-import 'package:charity_app/core/constants/app_radius.dart';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../constants/app_colors.dart';
+import '../constants/app_radius.dart';
 
 class ImageUploadBox extends StatefulWidget {
   final String label;
   final String hint;
-  final String supportedFormats;
+  final String? supportedFormats;
   final ValueChanged<File?>? onImageSelected;
 
   const ImageUploadBox({
     super.key,
     required this.label,
-    this.hint = 'Tap to upload photo',
-    this.supportedFormats = 'JPG, PNG supported',
+    this.hint = '',
+    this.supportedFormats,
     this.onImageSelected,
   });
 
@@ -52,7 +55,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Choose Source',
+                'choose_image_source'.tr(),
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -65,7 +68,10 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
                   backgroundColor: cs.primary.withValues(alpha: 0.1),
                   child: Icon(Icons.camera_alt, color: cs.primary),
                 ),
-                title: Text('Camera', style: TextStyle(color: cs.onSurface)),
+                title: Text(
+                  'camera'.tr(),
+                  style: TextStyle(color: cs.onSurface),
+                ),
                 onTap: () => Navigator.pop(context, ImageSource.camera),
               ),
               ListTile(
@@ -73,7 +79,10 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
                   backgroundColor: cs.primary.withValues(alpha: 0.1),
                   child: Icon(Icons.photo_library, color: cs.primary),
                 ),
-                title: Text('Gallery', style: TextStyle(color: cs.onSurface)),
+                title: Text(
+                  'gallery'.tr(),
+                  style: TextStyle(color: cs.onSurface),
+                ),
                 onTap: () => Navigator.pop(context, ImageSource.gallery),
               ),
               if (_image != null)
@@ -83,7 +92,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
                     child: Icon(Icons.delete_outline, color: cs.error),
                   ),
                   title: Text(
-                    'Remove photo',
+                    'remove_photo'.tr(),
                     style: TextStyle(color: cs.error),
                   ),
                   onTap: () {
@@ -115,12 +124,14 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fillColor = isDark
-        ? AppColors.darkInputFill
-        : AppColors.lightInputFill;
+    final fillColor =
+        isDark ? AppColors.darkInputFill : AppColors.lightInputFill;
     final borderColor = _image != null
         ? cs.primary
         : (isDark ? AppColors.darkBorder : AppColors.lightBorder);
+    final hint = widget.hint.isNotEmpty ? widget.hint : 'tap_upload'.tr();
+    final formats =
+        widget.supportedFormats ?? 'image_formats_supported'.tr();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,14 +156,16 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
               borderRadius: BorderRadius.circular(AppRadius.medium),
               border: Border.all(color: borderColor, width: 1.5),
             ),
-            child: _image != null ? _preview(cs) : _placeholder(cs),
+            child: _image != null
+                ? _preview()
+                : _placeholder(cs, hint, formats),
           ),
         ),
       ],
     );
   }
 
-  Widget _placeholder(ColorScheme cs) {
+  Widget _placeholder(ColorScheme cs, String hint, String formats) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -166,7 +179,7 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
         ),
         const SizedBox(height: 8),
         Text(
-          widget.hint,
+          hint,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -175,14 +188,17 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
         ),
         const SizedBox(height: 4),
         Text(
-          widget.supportedFormats,
-          style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.4)),
+          formats,
+          style: TextStyle(
+            fontSize: 11,
+            color: cs.onSurface.withValues(alpha: 0.4),
+          ),
         ),
       ],
     );
   }
 
-  Widget _preview(ColorScheme cs) {
+  Widget _preview() {
     return Stack(
       children: [
         ClipRRect(
@@ -194,9 +210,9 @@ class _ImageUploadBoxState extends State<ImageUploadBox> {
             fit: BoxFit.cover,
           ),
         ),
-        Positioned(
+        PositionedDirectional(
           top: 8,
-          right: 8,
+          end: 8,
           child: GestureDetector(
             onTap: _pick,
             child: Container(

@@ -158,6 +158,7 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                         context,
                         DonationCheckoutArgs(
                           causeTitle: campaign.titleKey.tr(),
+                          targetType: DonationTargetType.association,
                         ),
                       ),
                     ),

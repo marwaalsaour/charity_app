@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/auth/user_role.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
@@ -10,7 +11,9 @@ import '../../logic/notifications_cubit.dart';
 import '../../logic/notifications_state.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({super.key, required this.role});
+
+  final UserRole role;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -20,7 +23,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<NotificationsCubit>().load(seedDemo: true);
+    context.read<NotificationsCubit>().load(role: widget.role);
+  }
+
+  @override
+  void didUpdateWidget(covariant NotificationsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.role != widget.role) {
+      context.read<NotificationsCubit>().load(role: widget.role);
+    }
   }
 
   @override
@@ -52,13 +63,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (state is NotificationsError) {
             return _ErrorView(
               message: state.message,
-              onRetry: () => context.read<NotificationsCubit>().load(),
+              onRetry: () =>
+                  context.read<NotificationsCubit>().load(role: widget.role),
             );
           }
 
           if (state is NotificationsLoaded) {
             if (state.notifications.isEmpty) {
-              return _EmptyView();
+              return _EmptyView(role: widget.role);
             }
 
             return ListView.separated(
@@ -115,7 +127,9 @@ class _NotificationTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadius.medium),
             border: Border.all(
-              color: notification.isRead ? ext.border : cs.primary.withValues(alpha: 0.25),
+              color: notification.isRead
+                  ? ext.border
+                  : cs.primary.withValues(alpha: 0.25),
             ),
           ),
           child: Row(
@@ -195,29 +209,37 @@ class _NotificationTile extends StatelessWidget {
   _NotificationStyle _styleFor(AppNotificationType type, ColorScheme cs) {
     return switch (type) {
       AppNotificationType.donationSuccess => _NotificationStyle(
-        Icons.favorite,
-        AppColors.accentDark,
-      ),
+          Icons.favorite,
+          AppColors.accentDark,
+        ),
+      AppNotificationType.volunteerSubmitted => _NotificationStyle(
+          Icons.volunteer_activism,
+          AppColors.primary,
+        ),
       AppNotificationType.volunteerApproved => _NotificationStyle(
-        Icons.volunteer_activism,
-        AppColors.success,
-      ),
+          Icons.volunteer_activism,
+          AppColors.success,
+        ),
       AppNotificationType.volunteerRejected => _NotificationStyle(
-        Icons.cancel_outlined,
-        AppColors.error,
-      ),
+          Icons.cancel_outlined,
+          AppColors.error,
+        ),
+      AppNotificationType.requestSubmitted => _NotificationStyle(
+          Icons.assignment_turned_in_outlined,
+          AppColors.primary,
+        ),
       AppNotificationType.beneficiaryApproved => _NotificationStyle(
-        Icons.check_circle_outline,
-        AppColors.success,
-      ),
+          Icons.check_circle_outline,
+          AppColors.success,
+        ),
       AppNotificationType.beneficiaryRejected => _NotificationStyle(
-        Icons.highlight_off,
-        AppColors.error,
-      ),
+          Icons.highlight_off,
+          AppColors.error,
+        ),
       AppNotificationType.general => _NotificationStyle(
-        Icons.notifications_none,
-        cs.primary,
-      ),
+          Icons.notifications_none,
+          cs.primary,
+        ),
     };
   }
 }
@@ -230,9 +252,17 @@ class _NotificationStyle {
 }
 
 class _EmptyView extends StatelessWidget {
+  const _EmptyView({required this.role});
+
+  final UserRole role;
+
   @override
   Widget build(BuildContext context) {
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
+    final descKey = role == UserRole.beneficiary
+        ? 'no_notifications_desc_beneficiary'
+        : 'no_notifications_desc_donor';
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -251,7 +281,7 @@ class _EmptyView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'no_notifications_desc'.tr(),
+              descKey.tr(),
               textAlign: TextAlign.center,
               style: TextStyle(color: ext.textSecondary, height: 1.5),
             ),
@@ -276,7 +306,11 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off, size: 48, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.cloud_off,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),

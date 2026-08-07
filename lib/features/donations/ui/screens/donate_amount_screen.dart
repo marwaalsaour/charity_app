@@ -23,7 +23,7 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
   String _currency = 'USD';
   bool _isSubmitting = false;
 
-  static const _currencies = ['USD', 'SYP', 'EUR'];
+  static const _currencies = ['USD', 'SYP', 'EUR', 'SAR', 'AED', 'EGP'];
   static const _quickAmounts = [50, 100, 250, 500];
 
   @override
@@ -44,7 +44,7 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
     setState(() => _isSubmitting = true);
     await completeDonation(
       context: context,
-      causeTitle: widget.args.causeTitle,
+      args: widget.args,
       amount: amount,
       currency: _currency,
     );

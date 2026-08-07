@@ -6,6 +6,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/widgets/custom_button.dart';
+import '../../../notifications/data/notification_helper.dart';
 import '../../../profile/data/models/volunteer_activity_model.dart';
 import '../../../profile/data/repositories/volunteer_activity_repository.dart';
 import '../../data/models/community_campaign_model.dart';
@@ -77,6 +78,10 @@ class _FieldVolunteerScreenState extends State<FieldVolunteerScreen> {
         hours: hours,
         date: DateTime.now(),
       ),
+    );
+
+    await NotificationHelper.notifyVolunteerSubmitted(
+      campaignTitle: widget.campaign.titleKey.tr(),
     );
 
     if (!mounted) return;

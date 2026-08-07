@@ -1,7 +1,9 @@
 enum AppNotificationType {
   donationSuccess,
+  volunteerSubmitted,
   volunteerApproved,
   volunteerRejected,
+  requestSubmitted,
   beneficiaryApproved,
   beneficiaryRejected,
   general,
@@ -18,9 +20,24 @@ extension AppNotificationTypeX on AppNotificationType {
   }
 }
 
+/// Inbox bucket: donor and beneficiary notifications stay separate.
+enum NotificationAudience {
+  donor,
+  beneficiary;
+
+  String get storageId => name;
+
+  static NotificationAudience fromRoleName(String? value) {
+    return value == 'beneficiary'
+        ? NotificationAudience.beneficiary
+        : NotificationAudience.donor;
+  }
+}
+
 class AppNotificationModel {
   final String id;
   final String userId;
+  final NotificationAudience audience;
   final AppNotificationType type;
   final String titleKey;
   final String bodyKey;
@@ -31,6 +48,7 @@ class AppNotificationModel {
   const AppNotificationModel({
     required this.id,
     required this.userId,
+    required this.audience,
     required this.type,
     required this.titleKey,
     required this.bodyKey,
@@ -39,10 +57,16 @@ class AppNotificationModel {
     required this.createdAt,
   });
 
-  factory AppNotificationModel.fromFirestore(String id, Map<String, dynamic> data) {
+  factory AppNotificationModel.fromFirestore(
+    String id,
+    Map<String, dynamic> data,
+  ) {
     return AppNotificationModel(
       id: id,
       userId: data['userId'] as String? ?? '',
+      audience: NotificationAudience.fromRoleName(
+        data['audience'] as String? ?? data['userId'] as String?,
+      ),
       type: AppNotificationTypeX.fromString(data['type'] as String?),
       titleKey: data['titleKey'] as String? ?? 'notification_general_title',
       bodyKey: data['bodyKey'] as String? ?? 'notification_general_body',
@@ -60,6 +84,9 @@ class AppNotificationModel {
     return AppNotificationModel(
       id: json['id'] as String? ?? '',
       userId: json['userId'] as String? ?? '',
+      audience: NotificationAudience.fromRoleName(
+        json['audience'] as String? ?? json['userId'] as String?,
+      ),
       type: AppNotificationTypeX.fromString(json['type'] as String?),
       titleKey: json['titleKey'] as String? ?? 'notification_general_title',
       bodyKey: json['bodyKey'] as String? ?? 'notification_general_body',
@@ -74,30 +101,33 @@ class AppNotificationModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'userId': userId,
-    'type': type.firestoreValue,
-    'titleKey': titleKey,
-    'bodyKey': bodyKey,
-    'bodyArgs': bodyArgs,
-    'isRead': isRead,
-    'createdAt': createdAt.toUtc().toIso8601String(),
-  };
+        'id': id,
+        'userId': userId,
+        'audience': audience.storageId,
+        'type': type.firestoreValue,
+        'titleKey': titleKey,
+        'bodyKey': bodyKey,
+        'bodyArgs': bodyArgs,
+        'isRead': isRead,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+      };
 
   Map<String, dynamic> toFirestore() => {
-    'userId': userId,
-    'type': type.firestoreValue,
-    'titleKey': titleKey,
-    'bodyKey': bodyKey,
-    'bodyArgs': bodyArgs,
-    'isRead': isRead,
-    'createdAt': createdAt.toUtc().toIso8601String(),
-  };
+        'userId': userId,
+        'audience': audience.storageId,
+        'type': type.firestoreValue,
+        'titleKey': titleKey,
+        'bodyKey': bodyKey,
+        'bodyArgs': bodyArgs,
+        'isRead': isRead,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+      };
 
   AppNotificationModel copyWith({bool? isRead}) {
     return AppNotificationModel(
       id: id,
       userId: userId,
+      audience: audience,
       type: type,
       titleKey: titleKey,
       bodyKey: bodyKey,

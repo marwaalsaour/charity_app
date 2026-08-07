@@ -6,7 +6,9 @@ import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../donations/data/models/donation_receipt_model.dart';
+import '../../../donations/data/repositories/donation_api_repository.dart';
 import '../../../donations/data/repositories/donation_receipt_repository.dart';
+import '../../data/repositories/user_profile_repository.dart';
 
 class MyDonationsScreen extends StatefulWidget {
   const MyDonationsScreen({super.key});
@@ -16,7 +18,8 @@ class MyDonationsScreen extends StatefulWidget {
 }
 
 class _MyDonationsScreenState extends State<MyDonationsScreen> {
-  final _repository = DonationReceiptRepository();
+  final _localRepository = DonationReceiptRepository();
+  final _apiRepository = DonationApiRepository();
   late Future<List<DonationReceiptModel>> _receiptsFuture;
 
   @override
@@ -27,8 +30,77 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
 
   void _loadReceipts() {
     setState(() {
-      _receiptsFuture = _repository.getReceipts();
+      _receiptsFuture = _fetchReceipts();
     });
+  }
+
+  Future<List<DonationReceiptModel>> _fetchReceipts() async {
+    final profile = await UserProfileRepository().getProfile();
+    final donorName = (profile != null && profile.hasName)
+        ? profile.fullName
+        : 'donor_mock_name'.tr();
+
+    final local = await _localRepository.getReceipts();
+
+    try {
+      final remote = await _apiRepository.fetchMyDonations(donorName: donorName);
+      if (remote.isEmpty) return local;
+
+      final byId = <String, DonationReceiptModel>{};
+
+      for (final r in remote) {
+        byId[r.id] = DonationReceiptModel(
+          id: r.id,
+          donorName: r.donorName,
+          recipientOrg: r.recipientOrg.tr(),
+          causeTitle: r.causeTitle.tr(),
+          amount: r.amount,
+          currency: r.currency,
+          date: r.date,
+          agent: r.agent.tr(),
+        );
+      }
+
+      // Keep locally-saved receipts (e.g. just after donate) and prefer
+      // their cause titles when the API only returns a generic type.
+      for (final r in local) {
+        final remoteMatch = byId[r.id];
+        if (remoteMatch == null) {
+          byId[r.id] = r;
+          continue;
+        }
+
+        final remoteTitle = remoteMatch.causeTitle.trim();
+        final localTitle = r.causeTitle.trim();
+        final remoteIsGeneric = remoteTitle.isEmpty ||
+            remoteTitle == 'User' ||
+            remoteTitle == 'recipient_org'.tr() ||
+            remoteTitle == 'recipient_org';
+
+        if (localTitle.isNotEmpty &&
+            (remoteIsGeneric || localTitle.length > remoteTitle.length)) {
+          byId[r.id] = DonationReceiptModel(
+            id: remoteMatch.id,
+            donorName: remoteMatch.donorName.isNotEmpty
+                ? remoteMatch.donorName
+                : r.donorName,
+            recipientOrg: remoteMatch.recipientOrg,
+            causeTitle: localTitle,
+            amount: r.amount > 0 ? r.amount : remoteMatch.amount,
+            currency: r.currency.isNotEmpty ? r.currency : remoteMatch.currency,
+            date: r.date,
+            agent: remoteMatch.agent,
+          );
+        }
+      }
+
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+      await _localRepository.replaceAll(merged);
+      return merged;
+    } catch (_) {
+      return local;
+    }
   }
 
   @override

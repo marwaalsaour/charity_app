@@ -1,5 +1,7 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import 'donation_checkout_args.dart';
 import 'donation_need_item.dart';
 
 enum DonationCategory { education, medical, orphans }
@@ -46,6 +48,30 @@ class DonationModel {
   final String? storyKey;
   final List<DonationNeedItem> needs;
 
+  /// When false, [nameKey]/[titleKey]/[descriptionKey] are plain display text.
+  final bool useTranslationKeys;
+
+  /// Where checkout should send the donation.
+  final DonationTargetType donateTargetType;
+
+  /// Real number of donation transactions for this case (when known).
+  final int? donorsCount;
+
+  /// Fundraising deadline (from admin, or default 30 days).
+  final DateTime? deadlineAt;
+
+  /// True when the beneficiary allowed publishing their real name.
+  final bool showBeneficiaryName;
+
+  /// Real beneficiary name when [showBeneficiaryName] is true.
+  final String? beneficiaryName;
+
+  /// Governorate / region residence for verification.
+  final String? residence;
+
+  /// School or university name (education cases).
+  final String? institution;
+
   const DonationModel({
     required this.id,
     required this.nameKey,
@@ -63,12 +89,103 @@ class DonationModel {
     this.doctorKey,
     this.storyKey,
     this.needs = const [],
+    this.useTranslationKeys = true,
+    this.donateTargetType = DonationTargetType.association,
+    this.donorsCount,
+    this.deadlineAt,
+    this.showBeneficiaryName = false,
+    this.beneficiaryName,
+    this.residence,
+    this.institution,
   });
 
   double get progress =>
       goal > 0 ? (raised / goal).clamp(0.0, 1.0) : 0.0;
 
-  int get donorCount => (raised / 30).round().clamp(8, 999);
+  int get donorCount => donorsCount ?? 0;
+
+  /// Remaining days until deadline. Defaults to 30 days from now when unknown.
+  int get daysLeft {
+    final end = deadlineAt ?? DateTime.now().add(const Duration(days: 30));
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    final startOfEnd = DateTime(end.year, end.month, end.day);
+    final days = startOfEnd.difference(startOfToday).inDays;
+    return days < 0 ? 0 : days;
+  }
+
+  /// Card title: consented name, else case title / fallback.
+  String get cardTitle {
+    if (showBeneficiaryName &&
+        beneficiaryName != null &&
+        beneficiaryName!.trim().isNotEmpty) {
+      return beneficiaryName!.trim();
+    }
+    return displayName;
+  }
+
+  bool get hasVerificationInfo =>
+      (showBeneficiaryName &&
+          beneficiaryName != null &&
+          beneficiaryName!.trim().isNotEmpty) ||
+      (residence != null && residence!.trim().isNotEmpty) ||
+      (institution != null && institution!.trim().isNotEmpty);
+
+  DonationModel copyWith({
+    int? id,
+    String? nameKey,
+    String? titleKey,
+    String? descriptionKey,
+    DonationCategory? category,
+    double? raised,
+    double? goal,
+    String? image,
+    bool? isUrgent,
+    bool? useTranslationKeys,
+    DonationTargetType? donateTargetType,
+    int? donorsCount,
+    DateTime? deadlineAt,
+    bool? showBeneficiaryName,
+    String? beneficiaryName,
+    String? residence,
+    String? institution,
+  }) {
+    return DonationModel(
+      id: id ?? this.id,
+      nameKey: nameKey ?? this.nameKey,
+      titleKey: titleKey ?? this.titleKey,
+      descriptionKey: descriptionKey ?? this.descriptionKey,
+      category: category ?? this.category,
+      raised: raised ?? this.raised,
+      goal: goal ?? this.goal,
+      image: image ?? this.image,
+      isUrgent: isUrgent ?? this.isUrgent,
+      techTitleKey: techTitleKey,
+      techDescKey: techDescKey,
+      techTagKeys: techTagKeys,
+      hospitalKey: hospitalKey,
+      doctorKey: doctorKey,
+      storyKey: storyKey,
+      needs: needs,
+      useTranslationKeys: useTranslationKeys ?? this.useTranslationKeys,
+      donateTargetType: donateTargetType ?? this.donateTargetType,
+      donorsCount: donorsCount ?? this.donorsCount,
+      deadlineAt: deadlineAt ?? this.deadlineAt,
+      showBeneficiaryName: showBeneficiaryName ?? this.showBeneficiaryName,
+      beneficiaryName: beneficiaryName ?? this.beneficiaryName,
+      residence: residence ?? this.residence,
+      institution: institution ?? this.institution,
+    );
+  }
+
+  String get displayName =>
+      useTranslationKeys ? nameKey.tr() : nameKey;
+
+  String get displayTitle =>
+      useTranslationKeys ? titleKey.tr() : titleKey;
+
+  String get displayDescription =>
+      useTranslationKeys ? descriptionKey.tr() : descriptionKey;
 
   factory DonationModel.fromJson(Map<String, dynamic> json) {
     return DonationModel(

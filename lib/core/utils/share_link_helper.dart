@@ -21,7 +21,7 @@ class ShareLinkHelper {
     return copyLink(
       context,
       caseLink(donation.id),
-      title: donation.nameKey.tr(),
+      title: donation.displayName,
     );
   }
 

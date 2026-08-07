@@ -212,8 +212,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           onTap: () => context.go(AppRoutes.loginBeneficiary),
                         ),
                         const SizedBox(height: 8),
-                        /*GestureDetector(
-                          onTap: () => context.go(AppRoutes.registerBeneficiary),
+                        GestureDetector(
+                          onTap: () =>
+                              context.go(AppRoutes.registerBeneficiary),
                           child: Text(
                             'auth_register_as_beneficiary'.tr(),
                             style: const TextStyle(
@@ -222,7 +223,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               fontSize: 13,
                             ),
                           ),
-                        ),*/
+                        ),
                       ],
                     ],
                   ),

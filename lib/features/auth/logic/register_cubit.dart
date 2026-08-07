@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/network/api_exception.dart';
+import '../data/models/register_params.dart';
 import '../data/repositories/auth_repository.dart';
 import 'register_state.dart';
 
@@ -8,24 +10,14 @@ class RegisterCubit extends Cubit<RegisterState> {
 
   RegisterCubit(this._repository) : super(const RegisterInitial());
 
-  Future<void> register({
-    required String firstName,
-    required String lastName,
-    required String phone,
-    required String email,
-    required String password,
-  }) async {
+  Future<void> register(RegisterParams params) async {
     emit(const RegisterLoading());
 
     try {
-      await _repository.register(
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-        email: email,
-        password: password,
-      );
+      await _repository.register(params);
       emit(const RegisterSuccess());
+    } on ApiException catch (e) {
+      emit(RegisterError(e.message));
     } catch (_) {
       emit(const RegisterError('auth_error_generic'));
     }

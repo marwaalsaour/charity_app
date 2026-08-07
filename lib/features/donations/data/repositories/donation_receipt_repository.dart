@@ -19,7 +19,26 @@ class DonationReceiptRepository {
   Future<void> saveReceipt(DonationReceiptModel receipt) async {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getStringList(_storageKey) ?? [];
-    existing.add(jsonEncode(receipt.toJson()));
-    await prefs.setStringList(_storageKey, existing);
+    final receipts = existing
+        .map(
+          (e) => DonationReceiptModel.fromJson(
+            jsonDecode(e) as Map<String, dynamic>,
+          ),
+        )
+        .where((r) => r.id != receipt.id)
+        .toList();
+    receipts.add(receipt);
+    await prefs.setStringList(
+      _storageKey,
+      receipts.map((r) => jsonEncode(r.toJson())).toList(),
+    );
+  }
+
+  Future<void> replaceAll(List<DonationReceiptModel> receipts) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _storageKey,
+      receipts.map((r) => jsonEncode(r.toJson())).toList(),
+    );
   }
 }

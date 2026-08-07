@@ -20,6 +20,8 @@ class AppRoutes {
   static const medicalRequest = '/beneficiary/requests/medical';
   static const educationRequest = '/beneficiary/requests/education';
   static const orphanRequest = '/beneficiary/requests/orphan';
+  static const beneficiaryContactUs = '/beneficiary/contact-us';
+  static const beneficiaryHowToGetHelp = '/beneficiary/how-to-get-help';
 
   // Shared detail routes
   static const donationsList = '/donations_list';

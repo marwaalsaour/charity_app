@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/network/api_exception.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../auth/ui/widgets/auth_phone_field.dart';
-import '../../data/models/user_profile_model.dart';
 import '../../data/repositories/user_profile_repository.dart';
 import '../widgets/profile_avatar_picker.dart';
 
@@ -25,9 +26,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _repository = UserProfileRepository();
+  final _authRepository = AuthRepository();
 
   String? _imagePath;
-  int _memberSinceYear = 2022;
   bool _loading = true;
   bool _saving = false;
 
@@ -56,13 +57,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _phoneController.text = saved.phone;
       _addressController.text = saved.address;
       _imagePath = saved.imagePath;
-      _memberSinceYear = saved.memberSinceYear;
     } else {
       _firstNameController.text = 'profile_default_first_name'.tr();
       _lastNameController.text = 'profile_default_last_name'.tr();
     }
 
     setState(() => _loading = false);
+
+    final remote = await _authRepository.syncProfile();
+    if (!mounted || remote == null) return;
+    setState(() {
+      _firstNameController.text = remote.firstName;
+      _lastNameController.text = remote.lastName;
+      _phoneController.text = remote.phone;
+      _addressController.text = remote.address;
+      _imagePath = remote.imagePath;
+    });
   }
 
   Future<void> _save() async {
@@ -70,23 +80,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _saving = true);
 
-    final profile = UserProfileModel(
-      firstName: _firstNameController.text.trim(),
-      lastName: _lastNameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      address: _addressController.text.trim(),
-      imagePath: _imagePath,
-      memberSinceYear: _memberSinceYear,
-    );
+    try {
+      await _authRepository.updateProfile(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        address: _addressController.text.trim(),
+        localImagePath: _imagePath,
+      );
+      if (!mounted) return;
 
-    await _repository.saveProfile(profile);
-    if (!mounted) return;
-
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('profile_saved'.tr())),
-    );
-    context.pop(true);
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('profile_saved'.tr())),
+      );
+      context.pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message.tr())),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('profile_update_failed'.tr())),
+      );
+    }
   }
 
   @override

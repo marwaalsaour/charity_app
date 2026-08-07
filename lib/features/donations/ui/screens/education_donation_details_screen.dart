@@ -10,12 +10,18 @@ import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
 import '../../data/models/donation_need_item.dart';
 import '../utils/donation_flow_helper.dart';
+import '../widgets/case_verification_info.dart';
 import '../widgets/donation_cover_image.dart';
 
 class EducationDonationDetailsScreen extends StatelessWidget {
-  const EducationDonationDetailsScreen({super.key, required this.donation});
+  const EducationDonationDetailsScreen({
+    super.key,
+    required this.donation,
+    this.onDonate,
+  });
 
   final DonationModel donation;
+  final Future<void> Function()? onDonate;
 
   @override
   Widget build(BuildContext context) {
@@ -67,10 +73,14 @@ class EducationDonationDetailsScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (donation.hasVerificationInfo) ...[
+                          CaseVerificationInfo(donation: donation),
+                          const SizedBox(height: 16),
+                        ],
                         _SectionHeader(title: 'the_story'.tr()),
                         const SizedBox(height: 10),
                         Text(
-                          donation.descriptionKey.tr(),
+                          donation.displayDescription,
                           style: TextStyle(
                             fontSize: 14,
                             color: Theme.of(context)
@@ -97,10 +107,23 @@ class EducationDonationDetailsScreen extends StatelessWidget {
             ),
           ),
           _DonateBar(
-            onTap: () => openDonateAmountScreen(
-              context,
-              DonationCheckoutArgs(causeTitle: donation.nameKey.tr()),
-            ),
+            onTap: () async {
+              if (onDonate != null) {
+                await onDonate!();
+                return;
+              }
+              await openDonateAmountScreen(
+                context,
+                DonationCheckoutArgs(
+                  causeTitle: donation.cardTitle,
+                  targetType: donation.donateTargetType,
+                  targetId:
+                      donation.donateTargetType == DonationTargetType.request
+                          ? donation.id
+                          : null,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -151,7 +174,7 @@ class _InfoCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      donation.nameKey.tr(),
+                      donation.cardTitle,
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
@@ -160,7 +183,7 @@ class _InfoCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      donation.titleKey.tr(),
+                      donation.displayTitle,
                       style: TextStyle(
                         fontSize: 14,
                         color: ext.textSecondary,

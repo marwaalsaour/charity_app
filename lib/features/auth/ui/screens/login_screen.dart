@@ -138,8 +138,19 @@ class _LoginScreenState extends State<LoginScreen> {
                               isLoading: state is LoginLoading,
                               onTap: state is LoginLoading
                                   ? null
-                                  : () =>
-                                      context.read<LoginCubit>().loginGuest(),
+                                  : () {
+                                      if (!_formKey.currentState!.validate()) {
+                                        return;
+                                      }
+                                      final input = _selectedMethod == 0
+                                          ? _phoneController.text.trim()
+                                          : _emailController.text.trim();
+                                      context.read<LoginCubit>().login(
+                                            input: input,
+                                            password:
+                                                _passwordController.text,
+                                          );
+                                    },
                             );
                           },
                         ),

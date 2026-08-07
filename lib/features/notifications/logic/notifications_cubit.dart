@@ -2,28 +2,29 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/auth/user_role.dart';
+import '../data/models/app_notification_model.dart';
 import '../data/repositories/notification_repository.dart';
 import 'notifications_state.dart';
 
 class NotificationsCubit extends Cubit<NotificationsState> {
   NotificationsCubit({NotificationRepository? repository})
-      : _repository = repository ?? NotificationRepository(),
+      : _repository = repository ?? NotificationRepository.instance,
         super(NotificationsInitial());
 
   final NotificationRepository _repository;
   StreamSubscription? _subscription;
-  String? _userId;
+  NotificationAudience? _audience;
 
-  Future<void> load({bool seedDemo = false}) async {
+  Future<void> load({required UserRole role}) async {
     emit(NotificationsLoading());
     try {
-      _userId = await _repository.getOrCreateUserId();
-      if (seedDemo) {
-        await _repository.seedDemoNotifications(_userId!);
-      }
+      _audience = role == UserRole.beneficiary
+          ? NotificationAudience.beneficiary
+          : NotificationAudience.donor;
 
       await _subscription?.cancel();
-      _subscription = _repository.watchNotifications(_userId!).listen(
+      _subscription = _repository.watchNotifications(_audience!).listen(
         (items) {
           final unread = items.where((n) => !n.isRead).length;
           emit(NotificationsLoaded(notifications: items, unreadCount: unread));
@@ -42,8 +43,8 @@ class NotificationsCubit extends Cubit<NotificationsState> {
   }
 
   Future<void> markAllAsRead() async {
-    if (_userId == null) return;
-    await _repository.markAllAsRead(_userId!);
+    if (_audience == null) return;
+    await _repository.markAllAsRead(_audience!);
   }
 
   @override
