@@ -1,3 +1,5 @@
+import 'package:easy_localization/easy_localization.dart';
+
 class VolunteerActivityModel {
   final String id;
   final String campaignId;
@@ -42,6 +44,9 @@ class CampaignVolunteerSummary {
   final String locationKey;
   final int totalHours;
   final DateTime lastDate;
+  final bool useTranslationKeys;
+  /// pending | approved | rejected | ''
+  final String status;
 
   const CampaignVolunteerSummary({
     required this.campaignId,
@@ -49,5 +54,26 @@ class CampaignVolunteerSummary {
     required this.locationKey,
     required this.totalHours,
     required this.lastDate,
+    this.useTranslationKeys = true,
+    this.status = '',
   });
+
+  String get displayTitle =>
+      useTranslationKeys ? titleKey.tr() : titleKey;
+
+  String get displayLocation =>
+      useTranslationKeys ? locationKey.tr() : locationKey;
+
+  String get statusLabel {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'volunteer_status_pending'.tr();
+      case 'approved':
+        return 'volunteer_status_approved'.tr();
+      case 'rejected':
+        return 'volunteer_status_rejected'.tr();
+      default:
+        return displayLocation;
+    }
+  }
 }

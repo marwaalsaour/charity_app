@@ -1,17 +1,25 @@
-import 'dart:io';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
-import '../../../../core/widgets/document_upload_box.dart';
 import '../../../notifications/data/notification_helper.dart';
+import '../../../profile/data/repositories/user_profile_repository.dart';
+import '../../data/repositories/volunteer_api_repository.dart';
 import '../../data/volunteer_constants.dart';
 
+class _GovOption {
+  const _GovOption({required this.id, required this.name});
+  final int id;
+  final String name;
+}
+
+/// Association volunteer application — POST /volunteer/apply (GitHub API).
 class VolunteerFormScreen extends StatefulWidget {
   const VolunteerFormScreen({super.key});
 
@@ -21,34 +29,88 @@ class VolunteerFormScreen extends StatefulWidget {
 
 class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
   final _occupationController = TextEditingController();
   final _motivationController = TextEditingController();
   final _availabilityController = TextEditingController();
 
   final Set<String> _selectedSkills = {};
-  String? _selectedGovernorate;
-  String? _selectedGender;
+  String? _selectedGender; // male | female
+  /// Selected governorate id (API requires governorate_id; UI shows name).
+  int? _selectedGovernorateId;
+  List<_GovOption> _governorates = const [];
+  bool _loadingGovs = true;
   bool _agreedToPolicy = false;
-  File? _portfolioFile;
+  bool _submitting = false;
+  String? _existingStatus; // pending | approved | rejected
 
-  bool get _needsPortfolio => VolunteerSkills.needsPortfolio(_selectedSkills);
+  @override
+  void initState() {
+    super.initState();
+    _loadGovernorates();
+    _loadExistingApplication();
+  }
+
+  Future<void> _loadExistingApplication() async {
+    final app =
+        await VolunteerApiRepository().fetchMyAssociationApplication();
+    if (!mounted || app == null) return;
+    final status = app['status']?.toString().toLowerCase();
+    if (status == null || status.isEmpty) return;
+    setState(() => _existingStatus = status);
+  }
+
+  Future<void> _loadGovernorates() async {
+    try {
+      final response = await ApiClient.instance.dio.get('/governorates');
+      final list = _parseGovernorates(response.data);
+      if (!mounted) return;
+      setState(() {
+        _governorates = list;
+        _loadingGovs = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingGovs = false);
+    }
+  }
+
+  List<_GovOption> _parseGovernorates(dynamic data) {
+    List? raw;
+    if (data is List) {
+      raw = data;
+    } else if (data is Map) {
+      final nested = data['data'] ?? data['governorates'];
+      if (nested is List) raw = nested;
+    }
+    if (raw == null) return const [];
+
+    final list = <_GovOption>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final id = item['id'];
+      final name = item['name']?.toString().trim() ?? '';
+      final idInt = id is num ? id.toInt() : int.tryParse(id?.toString() ?? '');
+      if (idInt != null && name.isNotEmpty) {
+        list.add(_GovOption(id: idInt, name: name));
+      }
+    }
+    return list;
+  }
 
   @override
   void dispose() {
-    _phoneController.dispose();
     _occupationController.dispose();
     _motivationController.dispose();
     _availabilityController.dispose();
     super.dispose();
   }
 
-  void _toggleSkill(String skillKey) {
+  void _toggleSkill(String apiKey) {
     setState(() {
-      if (_selectedSkills.contains(skillKey)) {
-        _selectedSkills.remove(skillKey);
+      if (_selectedSkills.contains(apiKey)) {
+        _selectedSkills.remove(apiKey);
       } else if (_selectedSkills.length < VolunteerSkills.maxSelection) {
-        _selectedSkills.add(skillKey);
+        _selectedSkills.add(apiKey);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -56,28 +118,32 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
-        return;
-      }
-
-      if (!VolunteerSkills.needsPortfolio(_selectedSkills)) {
-        _portfolioFile = null;
       }
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (_existingStatus == 'pending' ||
+        _existingStatus == 'approved' ||
+        _existingStatus == 'suspended') {
+      _showError(_existingStatus == 'approved' || _existingStatus == 'suspended'
+          ? 'volunteer_already_approved'
+          : 'volunteer_application_pending');
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedSkills.isEmpty) {
       _showError('volunteer_skills_required');
       return;
     }
-    if (_selectedGovernorate == null) {
+    if (_selectedGovernorateId == null) {
       _showError('volunteer_governorate_required');
       return;
     }
-    if (_needsPortfolio && _portfolioFile == null) {
-      _showError('volunteer_portfolio_required');
+    if (_selectedGender == null) {
+      _showError('volunteer_gender_hint');
       return;
     }
     if (!_agreedToPolicy) {
@@ -85,26 +151,56 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
       return;
     }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('volunteer_success_title'.tr()),
-        content: Text('volunteer_success_desc'.tr()),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.pop();
-            },
-            child: Text('ok'.tr()),
-          ),
-        ],
-      ),
-    );
+    final profile = await UserProfileRepository().getProfile();
+    final phone = profile?.phone.trim() ?? '';
+    if (phone.isEmpty) {
+      _showError('volunteer_phone_from_profile_required');
+      return;
+    }
 
-    // Fire-and-forget donor inbox notification.
-    NotificationHelper.notifyVolunteerSubmitted();
+    setState(() => _submitting = true);
+    try {
+      await VolunteerApiRepository().applyToAssociation(
+        phone: phone,
+        gender: _selectedGender!,
+        occupation: _occupationController.text.trim(),
+        governorateId: _selectedGovernorateId!,
+        skills: _selectedSkills.toList(),
+        availability: _availabilityController.text.trim(),
+        description: _motivationController.text.trim(),
+      );
+
+      await NotificationHelper.notifyVolunteerSubmitted();
+
+      if (!mounted) return;
+      setState(() => _existingStatus = 'pending');
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('volunteer_success_title'.tr()),
+          content: Text('volunteer_success_desc'.tr()),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.pop();
+              },
+              child: Text('ok'.tr()),
+            ),
+          ],
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showError(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showError('donate_error_generic');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   void _showError(String key) {
@@ -119,15 +215,7 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: AppBar(
-        title: Text('volunteer_form_title'.tr()),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-        ),
-      ),
+      appBar: AtaaAppBar(title: 'volunteer_form_title'.tr()),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -141,47 +229,48 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
                 height: 1.5,
               ),
             ),
+            if (_existingStatus != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _existingStatus == 'pending'
+                      ? 'volunteer_application_pending'.tr()
+                      : _existingStatus == 'approved'
+                          ? 'volunteer_already_approved'.tr()
+                          : 'volunteer_status_rejected'.tr(),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Text(
               'volunteer_section_personal'.tr(),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
-            CustomTextField(
-              label: 'volunteer_phone'.tr(),
-              hint: 'volunteer_phone_hint'.tr(),
-              prefixIcon: Icons.phone_outlined,
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              validator: (v) =>
-                  v == null || v.trim().length < 9 ? 'volunteer_phone_error'.tr() : null,
-            ),
-            const SizedBox(height: 16),
-            _buildDropdown(
-              label: 'volunteer_gender'.tr(),
-              hint: 'volunteer_gender_hint'.tr(),
-              value: _selectedGender,
-              items: const ['gender_male', 'gender_female'],
-              onChanged: (v) => setState(() => _selectedGender = v),
-            ),
+            _buildGenderDropdown(),
             const SizedBox(height: 16),
             CustomTextField(
               label: 'volunteer_occupation'.tr(),
               hint: 'volunteer_occupation_hint'.tr(),
               prefixIcon: Icons.work_outline,
               controller: _occupationController,
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'volunteer_occupation_error'.tr() : null,
             ),
             const SizedBox(height: 16),
-            _buildDropdown(
-              label: 'volunteer_governorate'.tr(),
-              hint: 'volunteer_governorate_hint'.tr(),
-              value: _selectedGovernorate,
-              items: SyrianGovernorates.keys,
-              onChanged: (v) => setState(() => _selectedGovernorate = v),
-            ),
+            if (_loadingGovs)
+              const Center(child: CircularProgressIndicator())
+            else
+              _buildGovernorateDropdown(),
             const SizedBox(height: 28),
             Text(
               'volunteer_section_skills'.tr(),
@@ -199,24 +288,6 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
             ),
             const SizedBox(height: 12),
             _buildSkillsGrid(),
-            if (_needsPortfolio) ...[
-              const SizedBox(height: 20),
-              DocumentUploadBox(
-                label: 'volunteer_portfolio_label'.tr(),
-                hint: 'volunteer_portfolio_hint'.tr(),
-                supportedFormats: 'volunteer_portfolio_formats'.tr(),
-                onFileSelected: (file) => setState(() => _portfolioFile = file),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'volunteer_portfolio_note'.tr(),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurface.withValues(alpha: 0.5),
-                  height: 1.4,
-                ),
-              ),
-            ],
             const SizedBox(height: 28),
             Text(
               'volunteer_section_availability'.tr(),
@@ -228,8 +299,6 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
               hint: 'volunteer_availability_hint'.tr(),
               prefixIcon: Icons.schedule_outlined,
               controller: _availabilityController,
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'volunteer_availability_error'.tr() : null,
             ),
             const SizedBox(height: 16),
             CustomTextField(
@@ -246,10 +315,15 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
             _buildPolicyCheckbox(cs),
             const SizedBox(height: 28),
             CustomButton(
-              label: 'volunteer_submit'.tr(),
+              label: _submitting ? '...' : 'volunteer_submit'.tr(),
               icon: Icons.volunteer_activism,
               variant: ButtonVariant.primary,
-              onTap: _submit,
+              onTap: (_submitting ||
+                      _existingStatus == 'pending' ||
+                      _existingStatus == 'approved' ||
+                      _existingStatus == 'suspended')
+                  ? null
+                  : _submit,
             ),
           ],
         ),
@@ -257,38 +331,89 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
     );
   }
 
-  Widget _buildDropdown({
-    required String label,
-    required String hint,
-    required String? value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-  }) {
+  Widget _buildGenderDropdown() {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+        Text(
+          'volunteer_gender'.tr(),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: value,
+          initialValue: _selectedGender,
           decoration: InputDecoration(
-            hintText: hint,
+            hintText: 'volunteer_gender_hint'.tr(),
             filled: true,
-            fillColor: isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
+            fillColor:
+                isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
-          items: items
-              .map((key) => DropdownMenuItem(value: key, child: Text(key.tr())))
+          items: [
+            DropdownMenuItem(value: 'male', child: Text('gender_male'.tr())),
+            DropdownMenuItem(
+                value: 'female', child: Text('gender_female'.tr())),
+          ],
+          onChanged: (v) => setState(() => _selectedGender = v),
+          validator: (v) => v == null ? 'volunteer_gender_hint'.tr() : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGovernorateDropdown() {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'volunteer_governorate'.tr(),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        // UI shows governorate name; API receives governorate_id.
+        DropdownButtonFormField<int>(
+          initialValue: _selectedGovernorateId,
+          isExpanded: true,
+          decoration: InputDecoration(
+            hintText: 'volunteer_governorate_hint'.tr(),
+            filled: true,
+            fillColor:
+                isDark ? AppColors.darkInputFill : AppColors.lightInputFill,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+          items: _governorates
+              .map(
+                (g) => DropdownMenuItem<int>(
+                  value: g.id,
+                  child: Text(g.name, overflow: TextOverflow.ellipsis),
+                ),
+              )
               .toList(),
-          onChanged: onChanged,
-          validator: (v) => v == null ? '$label *' : null,
+          onChanged: (v) => setState(() => _selectedGovernorateId = v),
+          validator: (v) =>
+              v == null ? 'volunteer_governorate_required'.tr() : null,
         ),
       ],
     );
@@ -300,12 +425,12 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: VolunteerSkills.keys.map((skillKey) {
-        final isSelected = _selectedSkills.contains(skillKey);
+      children: VolunteerSkills.apiKeys.map((apiKey) {
+        final isSelected = _selectedSkills.contains(apiKey);
         return FilterChip(
-          label: Text(skillKey.tr()),
+          label: Text(VolunteerSkills.labelKey(apiKey).tr()),
           selected: isSelected,
-          onSelected: (_) => _toggleSkill(skillKey),
+          onSelected: (_) => _toggleSkill(apiKey),
           selectedColor: AppColors.primary.withValues(alpha: 0.15),
           checkmarkColor: AppColors.primary,
           labelStyle: TextStyle(
@@ -314,9 +439,12 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
             color: isSelected ? AppColors.primary : cs.onSurface,
           ),
           side: BorderSide(
-            color: isSelected ? AppColors.primary : cs.outline.withValues(alpha: 0.3),
+            color: isSelected
+                ? AppColors.primary
+                : cs.outline.withValues(alpha: 0.3),
           ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         );
       }).toList(),
     );
@@ -332,7 +460,9 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
           color: cs.primary.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _agreedToPolicy ? AppColors.primary : cs.outline.withValues(alpha: 0.3),
+            color: _agreedToPolicy
+                ? AppColors.primary
+                : cs.outline.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -348,7 +478,8 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   'volunteer_policy_agree'.tr(),
-                  style: TextStyle(fontSize: 13, color: cs.onSurface, height: 1.5),
+                  style:
+                      TextStyle(fontSize: 13, color: cs.onSurface, height: 1.5),
                 ),
               ),
             ),

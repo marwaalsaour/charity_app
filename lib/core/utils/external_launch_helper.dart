@@ -22,6 +22,24 @@ class ExternalLaunchHelper {
     );
   }
 
+  static Future<void> openUrl(BuildContext context, String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('open_link_failed'.tr())),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('open_link_failed'.tr())),
+        );
+      }
+    }
+  }
+
   static Future<void> openEmail(
     BuildContext context, {
     required String email,

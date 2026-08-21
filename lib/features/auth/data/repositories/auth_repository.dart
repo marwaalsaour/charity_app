@@ -1,60 +1,206 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_constants.dart';
 import '../../../../core/network/api_exception.dart';
 import '../../../../core/network/token_storage.dart';
 import '../../../profile/data/models/user_profile_model.dart';
+import '../../../profile/data/models/wallet_currencies.dart';
 import '../../../profile/data/repositories/user_profile_repository.dart';
 import '../models/register_params.dart';
+import '../auth_phone.dart';
 
 class AuthRepository {
   AuthRepository({
     Dio? dio,
     TokenStorage? tokenStorage,
     UserProfileRepository? profileRepository,
-  })  : _dio = dio ?? ApiClient.instance.dio,
-        _tokenStorage = tokenStorage ?? TokenStorage(),
-        _profileRepository = profileRepository ?? UserProfileRepository();
+  }) : _dio = dio ?? ApiClient.instance.dio,
+       _tokenStorage = tokenStorage ?? TokenStorage(),
+       _profileRepository = profileRepository ?? UserProfileRepository();
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
   final UserProfileRepository _profileRepository;
 
-  Future<void> login({
+  /// Returns a human-readable FCM sync summary for on-screen debug.
+  Future<String> login({
     required String input,
     required String password,
+    String? userCategory,
   }) async {
     final isEmail = input.contains('@');
-    final body = <String, dynamic>{
-      if (isEmail) 'email': input.trim() else 'phone': input.trim(),
-      'password': password,
-    };
+    ApiException? lastError;
 
+    if (isEmail) {
+      return _loginOnce(
+        body: {
+          'email': input.trim(),
+          'password': password,
+        },
+        isEmail: true,
+      );
+    }
+
+    for (final phone in AuthPhone.loginCandidates(input)) {
+      try {
+        return await _loginOnce(
+          body: {
+            'phone': phone,
+            'password': password,
+          },
+          isEmail: false,
+        );
+      } on ApiException catch (e) {
+        lastError = e;
+        if (e.statusCode != 401 &&
+            e.statusCode != 403 &&
+            e.statusCode != 422) {
+          rethrow;
+        }
+      }
+    }
+
+    throw lastError ?? const ApiException('auth_error_wrong_phone');
+  }
+
+  Future<String> _loginOnce({
+    required Map<String, dynamic> body,
+    required bool isEmail,
+  }) async {
     try {
       final response = await _dio.post(
         '/signin',
         data: body,
-        options: Options(contentType: Headers.jsonContentType),
+        options: Options(
+          contentType: Headers.jsonContentType,
+          validateStatus: (status) => status != null && status < 500,
+        ),
       );
       final data = response.data;
-
-      if (data is! Map || data['success'] != true) {
+      final token = _extractToken(data);
+      if (token == null || token.isEmpty) {
         throw ApiException(
-          _messageFrom(data) ?? 'auth_error_generic',
+          _messageFrom(data) ??
+              (isEmail ? 'auth_error_wrong_email' : 'auth_error_wrong_phone'),
           statusCode: response.statusCode,
         );
       }
 
-      final token = data['token']?.toString();
-      if (token == null || token.isEmpty) {
-        throw const ApiException('auth_error_generic');
-      }
-
       await _tokenStorage.saveToken(token);
       await syncProfile();
+      unawaited(syncFcmTokenToBackend());
+      return token;
     } on DioException catch (e) {
       throw _mapDioError(e, isEmail: isEmail);
+    }
+  }
+
+  /// Sends the device FCM token to Laravel so the server can push notifications.
+  Future<String> updateFcmToken(String fcmToken) async {
+    final authToken = await _tokenStorage.getToken();
+    if (authToken == null || authToken.isEmpty) {
+      // ignore: avoid_print
+      print('RESPONSE STATUS: skipped');
+      // ignore: avoid_print
+      print('RESPONSE BODY: no auth token — request not sent');
+      return 'FCM SKIP: no auth token';
+    }
+    if (fcmToken.trim().isEmpty) {
+      // ignore: avoid_print
+      print('RESPONSE STATUS: skipped');
+      // ignore: avoid_print
+      print('RESPONSE BODY: empty fcm token — request not sent');
+      return 'FCM SKIP: empty fcm token';
+    }
+
+    try {
+      final response = await _dio.post(
+        ApiConstants.updateFcmToken,
+        data: {'fcm_token': fcmToken.trim()},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      // ignore: avoid_print
+      print('RESPONSE STATUS: ${response.statusCode}');
+      // ignore: avoid_print
+      print('RESPONSE BODY: ${response.data}');
+      return 'FCM TOKEN: $fcmToken\nSTATUS: ${response.statusCode}\nBODY: ${response.data}';
+    } on DioException catch (e) {
+      // ignore: avoid_print
+      print('RESPONSE STATUS: ${e.response?.statusCode}');
+      // ignore: avoid_print
+      print('RESPONSE BODY: ${e.response?.data}\nERR: ${e.message}');
+      return 'FCM TOKEN: $fcmToken\nSTATUS: ${e.response?.statusCode}\nBODY: ${e.response?.data}\nERR: ${e.message}';
+    }
+  }
+
+  /// Best-effort: read FCM token and POST it. Never throws to callers.
+  Future<String> syncFcmTokenToBackend() async {
+    try {
+      if (Firebase.apps.isEmpty) {
+        // ignore: avoid_print
+        print('FCM TOKEN VALUE: null');
+        // ignore: avoid_print
+        print('RESPONSE STATUS: skipped');
+        // ignore: avoid_print
+        print('RESPONSE BODY: Firebase.apps is empty (not initialized)');
+        return 'FCM SKIP: Firebase.apps is empty (not initialized)';
+      }
+
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance.getToken();
+      } catch (e) {
+        // ignore: avoid_print
+        print('FCM TOKEN VALUE: null');
+        // ignore: avoid_print
+        print('RESPONSE STATUS: skipped');
+        // ignore: avoid_print
+        print('RESPONSE BODY: getToken() threw: $e');
+        return 'FCM TOKEN VALUE: null\ngetToken() threw: $e';
+      }
+
+      // ignore: avoid_print
+      print('FCM TOKEN VALUE: $fcmToken');
+
+      if (fcmToken == null || fcmToken.isEmpty) {
+        try {
+          await FirebaseMessaging.instance.deleteToken();
+          await Future<void>.delayed(const Duration(milliseconds: 800));
+          fcmToken = await FirebaseMessaging.instance.getToken();
+          // ignore: avoid_print
+          print('FCM TOKEN VALUE: $fcmToken');
+        } catch (e) {
+          // ignore: avoid_print
+          print('FCM TOKEN VALUE: null');
+          // ignore: avoid_print
+          print('RESPONSE STATUS: skipped');
+          // ignore: avoid_print
+          print('RESPONSE BODY: getToken retry threw: $e');
+          return 'FCM TOKEN VALUE: null\ngetToken retry threw: $e';
+        }
+      }
+
+      if (fcmToken == null || fcmToken.isEmpty) {
+        // ignore: avoid_print
+        print('RESPONSE STATUS: skipped');
+        // ignore: avoid_print
+        print('RESPONSE BODY: fcm token is null — not sent to backend');
+        return 'FCM SKIP: getToken() returned null/empty';
+      }
+      return await updateFcmToken(fcmToken);
+    } catch (e) {
+      // ignore: avoid_print
+      print('FCM TOKEN VALUE: null');
+      // ignore: avoid_print
+      print('RESPONSE STATUS: skipped');
+      // ignore: avoid_print
+      print('RESPONSE BODY: syncFcmTokenToBackend failed: $e');
+      return 'syncFcmTokenToBackend failed: $e';
     }
   }
 
@@ -64,6 +210,11 @@ class AuthRepository {
     } on DioException {
       // Clear local session even if the remote call fails.
     } finally {
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          await FirebaseMessaging.instance.deleteToken();
+        }
+      } catch (_) {}
       await _tokenStorage.clearToken();
       await _profileRepository.clearSession();
     }
@@ -79,7 +230,7 @@ class AuthRepository {
       if (user is! Map) return null;
 
       final profile = UserProfileModel.fromApiUser(
-        user,
+        _userWithWallet(user, data),
         imageUrl: ApiConstants.storageUrl(user['profile_image']?.toString()),
       );
 
@@ -102,7 +253,7 @@ class AuthRepository {
       final map = <String, dynamic>{
         'first_name': firstName.trim(),
         'last_name': lastName.trim(),
-        'phone': phone.trim(),
+        'phone': AuthPhone.normalize(phone),
         'address': address.trim(),
       };
 
@@ -136,7 +287,7 @@ class AuthRepository {
       }
 
       final profile = UserProfileModel.fromApiUser(
-        user,
+        _userWithWallet(user, data),
         imageUrl: ApiConstants.storageUrl(user['profile_image']?.toString()),
       );
       await _profileRepository.saveProfile(profile);
@@ -166,6 +317,7 @@ class AuthRepository {
   }
 
   Future<void> register(RegisterParams params) async {
+    await _tokenStorage.clearToken();
     final map = <String, dynamic>{
       'first_name': params.firstName.trim(),
       'last_name': params.lastName.trim(),
@@ -182,7 +334,9 @@ class AuthRepository {
 
     final phone = params.phone?.trim();
     final email = params.email?.trim();
-    if (phone != null && phone.isNotEmpty) map['phone'] = phone;
+    if (phone != null && phone.isNotEmpty) {
+      map['phone'] = AuthPhone.normalize(phone);
+    }
     if (email != null && email.isNotEmpty) map['email'] = email;
 
     if (params.nationalIdImage != null) {
@@ -200,10 +354,7 @@ class AuthRepository {
     }
 
     try {
-      final response = await _dio.post(
-        '/signup',
-        data: FormData.fromMap(map),
-      );
+      final response = await _dio.post('/signup', data: FormData.fromMap(map));
       final data = response.data;
 
       if (data is! Map || data['success'] != true) {
@@ -268,24 +419,56 @@ class AuthRepository {
     }
 
     if (status == 403) {
-      final lower = (message ?? '').toLowerCase();
-      if (lower.contains('pending')) {
-        return ApiException('auth_error_pending', statusCode: status);
-      }
-      if (lower.contains('rejected')) {
-        return ApiException('auth_error_rejected', statusCode: status);
-      }
-      return ApiException(message ?? 'auth_error_generic', statusCode: status);
+      return ApiException(
+        message ??
+            (isEmail ? 'auth_error_wrong_email' : 'auth_error_wrong_phone'),
+        statusCode: status,
+      );
     }
 
     if (status != null && status >= 500) {
       return ApiException('auth_error_server', statusCode: status);
     }
 
-    return ApiException(
-      message ?? 'auth_error_generic',
-      statusCode: status,
-    );
+    return ApiException(message ?? 'auth_error_generic', statusCode: status);
+  }
+
+  Map<dynamic, dynamic> _userWithWallet(Map user, Map data) {
+    final merged = Map<dynamic, dynamic>.from(user);
+    merged['balances'] = {
+      ...WalletCurrencies.parse(data['balances']),
+      ...WalletCurrencies.parse(data['wallet']),
+      ...WalletCurrencies.parse(data['wallets']),
+      ...WalletCurrencies.parse(user['balances']),
+      ...WalletCurrencies.parse(user['wallet']),
+      ...WalletCurrencies.parse(user['wallets']),
+    };
+    return merged;
+  }
+
+  String? _extractToken(dynamic data) {
+    if (data is! Map) return null;
+    final direct = data['token'] ?? data['access_token'] ?? data['accessToken'];
+    if (direct != null && direct.toString().trim().isNotEmpty) {
+      return direct.toString();
+    }
+    final nested = data['data'];
+    if (nested is Map) {
+      final token =
+          nested['token'] ?? nested['access_token'] ?? nested['accessToken'];
+      if (token != null && token.toString().trim().isNotEmpty) {
+        return token.toString();
+      }
+    }
+    final user = data['user'];
+    if (user is Map) {
+      final token =
+          user['token'] ?? user['access_token'] ?? user['accessToken'];
+      if (token != null && token.toString().trim().isNotEmpty) {
+        return token.toString();
+      }
+    }
+    return null;
   }
 
   String? _messageFrom(dynamic data) {

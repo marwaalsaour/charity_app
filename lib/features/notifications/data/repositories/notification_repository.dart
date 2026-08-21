@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/network/api_client.dart';
 import '../models/app_notification_model.dart';
 
 class NotificationRepository {
@@ -15,29 +17,38 @@ class NotificationRepository {
 
   static bool firebaseReady = false;
 
-  /// Shared instance so helpers and UI listen to the same local stream.
   static final NotificationRepository instance = NotificationRepository._();
 
-  factory NotificationRepository({FirebaseFirestore? firestore}) {
+  factory NotificationRepository({FirebaseFirestore? firestore, Dio? dio}) {
     if (firestore != null && firebaseReady) {
-      return NotificationRepository._(firestore: firestore);
+      return NotificationRepository._(firestore: firestore, dio: dio);
     }
     return instance;
   }
 
-  NotificationRepository._({FirebaseFirestore? firestore})
-      : _firestore = firebaseReady
-            ? (firestore ?? FirebaseFirestore.instance)
-            : null;
+  NotificationRepository._({FirebaseFirestore? firestore, Dio? dio})
+      : _firestore =
+            firebaseReady ? (firestore ?? FirebaseFirestore.instance) : null,
+        _dio = dio ?? ApiClient.instance.dio;
 
   final FirebaseFirestore? _firestore;
+  final Dio _dio;
   static final _localStream =
       StreamController<List<AppNotificationModel>>.broadcast();
 
-
   bool get _useFirestore => firebaseReady && _firestore != null;
 
-  /// One-time wipe of old demo notifications so inboxes start empty.
+  static const _firestoreTimeout = Duration(seconds: 2);
+
+  Future<T?> _tryFirestore<T>(Future<T> Function() action) async {
+    if (!_useFirestore) return null;
+    try {
+      return await action().timeout(_firestoreTimeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> ensureCleanStart() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_clearedDemoKey) == true) return;
@@ -51,6 +62,7 @@ class NotificationRepository {
     NotificationAudience audience,
   ) async* {
     await ensureCleanStart();
+    await syncFromServer(audience);
 
     if (_useFirestore) {
       yield* _firestore!
@@ -75,6 +87,47 @@ class NotificationRepository {
       (all) => all.where((n) => n.audience == audience).toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
     );
+  }
+
+  Future<void> syncFromServer(NotificationAudience audience) async {
+    try {
+      final response = await _dio.get('/mynotifications');
+      final data = response.data;
+      if (data is! Map || data['success'] != true) return;
+      final list = data['data'];
+      if (list is! List) return;
+
+      for (final item in list) {
+        if (item is! Map) continue;
+        final remote = AppNotificationModel.fromLaravel(
+          Map<String, dynamic>.from(item),
+          audience: audience,
+        );
+        await _upsertLocal(remote);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _upsertLocal(AppNotificationModel notification) async {
+    if (_useFirestore) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_localKey) ?? [];
+    final all = raw
+        .map(
+          (e) => AppNotificationModel.fromJson(
+            jsonDecode(e) as Map<String, dynamic>,
+          ),
+        )
+        .toList();
+
+    final index = all.indexWhere((n) => n.id == notification.id);
+    if (index >= 0) {
+      all[index] = notification.copyWith(isRead: all[index].isRead);
+    } else {
+      all.insert(0, notification);
+    }
+    await _saveLocalNotifications(all);
   }
 
   Future<List<AppNotificationModel>> _getLocalNotifications(
@@ -120,12 +173,9 @@ class NotificationRepository {
       bodyArgs: notification.bodyArgs,
       isRead: notification.isRead,
       createdAt: notification.createdAt,
+      titleText: notification.titleText,
+      bodyText: notification.bodyText,
     );
-
-    if (_useFirestore) {
-      await _firestore!.collection(_collection).add(withAudience.toFirestore());
-      return;
-    }
 
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_localKey) ?? [];
@@ -139,14 +189,26 @@ class NotificationRepository {
 
     all.insert(0, withAudience);
     await _saveLocalNotifications(all);
+
+    await _tryFirestore(
+      () => _firestore!.collection(_collection).add(withAudience.toFirestore()),
+    );
   }
 
   Future<void> markAsRead(String notificationId) async {
+    if (notificationId.startsWith('srv_')) {
+      final serverId = notificationId.substring(4);
+      try {
+        await _dio.put('/mynotifications/$serverId/read');
+      } catch (_) {}
+    }
+
     if (_useFirestore) {
-      await _firestore!.collection(_collection).doc(notificationId).update({
-        'isRead': true,
-      });
-      return;
+      await _tryFirestore(
+        () => _firestore!.collection(_collection).doc(notificationId).update({
+          'isRead': true,
+        }),
+      );
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -186,11 +248,31 @@ class NotificationRepository {
             jsonDecode(e) as Map<String, dynamic>,
           ),
         )
-        .map(
-          (n) => n.audience == audience ? n.copyWith(isRead: true) : n,
-        )
         .toList();
-    await _saveLocalNotifications(all);
+
+    for (final n in all.where((n) => n.audience == audience && !n.isRead)) {
+      if (n.id.startsWith('srv_')) {
+        try {
+          await _dio.put('/mynotifications/${n.id.substring(4)}/read');
+        } catch (_) {}
+      }
+    }
+
+    await _saveLocalNotifications(
+      all
+          .map(
+            (n) => n.audience == audience ? n.copyWith(isRead: true) : n,
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> clearLocalSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_localKey);
+    await prefs.remove(_legacyLocalKey);
+    await prefs.remove(_seededKey);
+    _localStream.add(const []);
   }
 
   Future<void> saveFcmToken({
@@ -199,14 +281,14 @@ class NotificationRepository {
     required String role,
   }) async {
     if (!_useFirestore) return;
-    await _firestore!.collection('users').doc(userId).set({
-      'fcmToken': token,
-      'role': role,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _tryFirestore(
+      () => _firestore!.collection('users').doc(userId).set({
+        'fcmToken': token,
+        'role': role,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+    );
   }
 
-  void dispose() {
-    // Shared stream — do not close from individual callers.
-  }
+  void dispose() {}
 }

@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../core/auth/user_role.dart';
 import '../core/constants/app_colors.dart';
+import '../core/navigation/tab_navigation.dart';
 import '../core/router/app_routes.dart';
+import '../features/beneficiary/ui/widgets/beneficiary_drawer.dart';
+import '../features/home/ui/widgets/app_drawer.dart';
 import '../features/requests/ui/utils/request_sheet_helper.dart';
 
 class MainNavigationScreen extends StatelessWidget {
@@ -56,6 +59,7 @@ class MainNavigationScreen extends StatelessWidget {
 
     if (isDonor &&
         (location.startsWith(AppRoutes.myDonations) ||
+            location.startsWith(AppRoutes.mySponsorships) ||
             (location.startsWith(AppRoutes.donationReceipt) &&
                 location.contains('from=profile')))) {
       currentIndex = 3;
@@ -78,12 +82,20 @@ class MainNavigationScreen extends StatelessWidget {
       currentIndex = 3;
     }
 
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: _BottomNavBar(
-        role: role,
-        currentIndex: currentIndex,
-        onTap: (index) => context.go(routes[index]),
+    return TabNavigation(
+      selectTab: (index) => context.go(routes[index]),
+      child: Scaffold(
+        drawerScrimColor: Colors.black.withValues(alpha: 0.6),
+        endDrawer: isDonor ? const AppDrawer() : const BeneficiaryDrawer(),
+        body: child,
+        bottomNavigationBar: location.startsWith(AppRoutes.associationMap) ||
+                location.startsWith(AppRoutes.beneficiaryAssociationMap)
+            ? null
+            : _BottomNavBar(
+                role: role,
+                currentIndex: currentIndex,
+                onTap: (index) => context.go(routes[index]),
+              ),
       ),
     );
   }

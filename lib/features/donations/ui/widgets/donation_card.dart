@@ -5,9 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
 import '../utils/donation_flow_helper.dart';
+import 'case_verification_info.dart';
+import 'donation_closed_box.dart';
 import 'donation_cover_image.dart';
 
 class DonationCard extends StatelessWidget {
@@ -18,16 +19,13 @@ class DonationCard extends StatelessWidget {
   static const double _imageHeight = 190;
 
   void _openDonate(BuildContext context) {
-    openDonateAmountScreen(
-      context,
-      DonationCheckoutArgs(
-        causeTitle: donation.cardTitle,
-        targetType: donation.donateTargetType,
-        targetId: donation.donateTargetType == DonationTargetType.request
-            ? donation.id
-            : null,
-      ),
-    );
+    if (donation.isFullyFunded) return;
+    openDonateAmountScreen(context, donation.checkoutArgs);
+  }
+
+  void _openSponsor(BuildContext context) {
+    if (donation.isFullyFunded) return;
+    openDonateAmountScreen(context, donation.sponsorshipCheckoutArgs);
   }
 
   @override
@@ -61,10 +59,7 @@ class DonationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DonationCoverImage(
-                  donation: donation,
-                  height: _imageHeight,
-                ),
+                DonationCoverImage(donation: donation, height: _imageHeight),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                   child: Column(
@@ -98,6 +93,10 @@ class DonationCard extends StatelessWidget {
                           height: 1.45,
                         ),
                       ),
+                      if (donation.hasVerificationInfo) ...[
+                        const SizedBox(height: 10),
+                        CaseVerificationInfo(donation: donation, compact: true),
+                      ],
                       const SizedBox(height: 14),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
@@ -113,7 +112,7 @@ class DonationCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '${'raised'.tr()}: \$${donation.raised.toInt()}',
+                            '${'raised'.tr()}: ${donation.formatRaised(context.locale)}',
                             style: TextStyle(
                               fontSize: 12,
                               color: ext.textSecondary,
@@ -128,7 +127,7 @@ class DonationCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${'goal'.tr()}: \$${donation.goal.toInt()}',
+                            '${'goal'.tr()}: ${donation.formatGoal(context.locale)}',
                             style: TextStyle(
                               fontSize: 12,
                               color: ext.textSecondary,
@@ -143,25 +142,81 @@ class DonationCard extends StatelessWidget {
               ],
             ),
           ),
-          Material(
-            color: cs.primary,
-            child: InkWell(
-              onTap: () => _openDonate(context),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    'donate_now'.tr(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+          donation.isFullyFunded
+              ? const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: DonationClosedBox(height: 48),
+                )
+              : donation.category == DonationCategory.orphans
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: Material(
+                            color: cs.primary,
+                            child: InkWell(
+                              onTap: () => _openDonate(context),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'donate_now'.tr(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Material(
+                            color: AppColors.accent,
+                            child: InkWell(
+                              onTap: () => _openSponsor(context),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'sponsor_now'.tr(),
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Material(
+                      color: cs.primary,
+                      child: InkWell(
+                        onTap: () => _openDonate(context),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: Text(
+                              'donate_now'.tr(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

@@ -8,6 +8,10 @@ class DonationReceiptModel {
   final DateTime date;
   final String agent;
 
+  /// Server case totals after a successful case donation (optional).
+  final int? caseDonorsCount;
+  final double? caseRaisedAmount;
+
   const DonationReceiptModel({
     required this.id,
     required this.donorName,
@@ -17,6 +21,8 @@ class DonationReceiptModel {
     required this.currency,
     required this.date,
     required this.agent,
+    this.caseDonorsCount,
+    this.caseRaisedAmount,
   });
 
   Map<String, dynamic> toJson() => {

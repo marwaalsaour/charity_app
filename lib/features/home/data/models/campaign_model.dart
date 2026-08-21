@@ -1,5 +1,9 @@
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+
 import '../../../campaigns/data/models/community_campaign_model.dart';
 import '../../../donations/data/models/donation_model.dart';
+import '../../../profile/data/models/wallet_currencies.dart';
 
 class CampaignModel {
   final String id;
@@ -29,9 +33,33 @@ class CampaignModel {
 
   double get progressPercent => progress * 100;
 
-  String get formattedGoal => '\$${goal.toStringAsFixed(0)}';
+  bool get isFullyFunded =>
+      linkedDonation?.isFullyFunded ??
+      linkedCommunity?.isFullyFunded ??
+      (goal > 0 && raised >= goal);
 
-  String get categoryLabelKey => categoryDisplayKey ?? 'categories.$category';
+  String formattedGoal([Locale? locale]) {
+    final code = linkedDonation?.displayCurrency ?? 'USD';
+    return WalletCurrencies.format(
+      goal,
+      code,
+      locale: locale ?? const Locale('en'),
+    );
+  }
+
+  String get displayTitle {
+    if (linkedDonation != null) return linkedDonation!.cardTitle;
+    if (linkedCommunity != null) return linkedCommunity!.displayTitle;
+    return titleKey.tr();
+  }
+
+  String get categoryLabelKey {
+    if (linkedCommunity != null && !linkedCommunity!.useTranslationKeys) {
+      // categoryKey may already be a translation key for type mapping
+      return linkedCommunity!.categoryKey;
+    }
+    return categoryDisplayKey ?? 'categories.$category';
+  }
 
   factory CampaignModel.fromDonation(DonationModel donation) {
     final goal = donation.goal;
@@ -78,9 +106,18 @@ class CampaignModel {
   }
 
   static String _categorySlugFromCommunity(String categoryKey) {
-    if (categoryKey.contains('environmental')) return 'environment';
-    if (categoryKey.contains('education')) return 'education';
-    if (categoryKey.contains('humanitarian')) return 'orphans';
+    final key = categoryKey.toLowerCase();
+    if (key.contains('environmental') || key.contains('environment')) {
+      return 'environment';
+    }
+    if (key.contains('education') || key.contains('educational')) {
+      return 'education';
+    }
+    if (key.contains('humanitarian') ||
+        key.contains('medical') ||
+        key.contains('patient')) {
+      return 'orphans';
+    }
     return 'environment';
   }
   factory CampaignModel.fromJson(Map<String, dynamic> json) {

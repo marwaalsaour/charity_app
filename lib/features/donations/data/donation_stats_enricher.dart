@@ -9,5 +9,8 @@ Future<DonationModel> enrichDonationWithLocalStats(DonationModel donation) async
   return donation.copyWith(
     donorsCount: math.max(donation.donorCount, local.donorsCount),
     raised: math.max(donation.raised, local.raised),
+    currency: donation.currency.isNotEmpty
+        ? donation.currency
+        : local.caseCurrency,
   );
 }

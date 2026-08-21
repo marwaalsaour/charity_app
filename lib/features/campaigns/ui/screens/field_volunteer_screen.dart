@@ -2,13 +2,13 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../notifications/data/notification_helper.dart';
-import '../../../profile/data/models/volunteer_activity_model.dart';
-import '../../../profile/data/repositories/volunteer_activity_repository.dart';
+import '../../../volunteer/data/repositories/volunteer_api_repository.dart';
 import '../../data/models/community_campaign_model.dart';
 
 class FieldVolunteerScreen extends StatefulWidget {
@@ -22,6 +22,7 @@ class FieldVolunteerScreen extends StatefulWidget {
 
 class _FieldVolunteerScreenState extends State<FieldVolunteerScreen> {
   bool _agreedToTerms = false;
+  bool _submitting = false;
   final Map<String, Set<String>> _selectedSlots = {};
 
   static const _days = [
@@ -55,7 +56,17 @@ class _FieldVolunteerScreenState extends State<FieldVolunteerScreen> {
   bool get _hasSelectedHours =>
       _selectedSlots.values.any((slots) => slots.isNotEmpty);
 
-  void _confirm() async {
+  String _availabilityText() {
+    final parts = <String>[];
+    for (final entry in _selectedSlots.entries) {
+      final slots = entry.value.map((s) => s.tr()).join(', ');
+      parts.add('${entry.key.tr()}: $slots');
+    }
+    return parts.join(' | ');
+  }
+
+  Future<void> _confirm() async {
+    if (_submitting) return;
     if (!_agreedToTerms) {
       _showMessage('field_volunteer.terms_required');
       return;
@@ -65,58 +76,72 @@ class _FieldVolunteerScreenState extends State<FieldVolunteerScreen> {
       return;
     }
 
-    final slotCount =
-        _selectedSlots.values.fold<int>(0, (sum, slots) => sum + slots.length);
-    final hours = VolunteerActivityRepository.hoursFromSlotCount(slotCount);
+    final campaignId = widget.campaign.apiId;
+    if (campaignId <= 0) {
+      _showMessage('donate_error_generic');
+      return;
+    }
 
-    await VolunteerActivityRepository().saveActivity(
-      VolunteerActivityModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        campaignId: widget.campaign.id,
-        campaignTitleKey: widget.campaign.titleKey,
-        locationKey: widget.campaign.locationKey,
-        hours: hours,
-        date: DateTime.now(),
-      ),
-    );
+    final availability = _availabilityText();
 
-    await NotificationHelper.notifyVolunteerSubmitted(
-      campaignTitle: widget.campaign.titleKey.tr(),
-    );
+    setState(() => _submitting = true);
+    try {
+      // Pending until admin approves via PATCH /campaigns/{id}/volunteers/{volunteerId}
+      await VolunteerApiRepository().applyForCampaign(
+        campaignId: campaignId,
+        notes: availability,
+        skills: 'field_volunteer',
+      );
 
-    if (!mounted) return;
+      await NotificationHelper.notifyVolunteerSubmitted(
+        campaignTitle: widget.campaign.displayTitle,
+      );
 
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final ext = Theme.of(ctx).extension<AppThemeExtension>()!;
-        return AlertDialog(
-          backgroundColor: ext.cardBackground,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.large),
-          ),
-          title: Text('field_volunteer.success_title'.tr()),
-          content: Text(
-            'field_volunteer.success_message'.tr(),
-            style: TextStyle(color: ext.textSecondary, height: 1.5),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                context.pop();
-              },
-              child: Text('ok'.tr()),
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          final ext = Theme.of(ctx).extension<AppThemeExtension>()!;
+          return AlertDialog(
+            backgroundColor: ext.cardBackground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.large),
             ),
-          ],
-        );
-      },
-    );
+            title: Text('field_volunteer.success_title'.tr()),
+            content: Text(
+              'field_volunteer.success_message'.tr(),
+              style: TextStyle(color: ext.textSecondary, height: 1.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  context.pop();
+                },
+                child: Text('ok'.tr()),
+              ),
+            ],
+          );
+        },
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('donate_error_generic');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   void _showMessage(String key) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(key.tr())),
+      SnackBar(
+        content: Text(key.tr()),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -126,185 +151,84 @@ class _FieldVolunteerScreenState extends State<FieldVolunteerScreen> {
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('field_volunteer.title'.tr()),
-      ),
+      appBar: AtaaAppBar(title: 'field_volunteer.title'.tr()),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: ext.cardBackground,
-              borderRadius: BorderRadius.circular(AppRadius.large),
-              border: Border.all(color: ext.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'field_volunteer.campaign_label'.tr(),
-                  style: TextStyle(fontSize: 12, color: ext.textSecondary),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.campaign.titleKey.tr(),
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.campaign.locationKey.tr(),
-                  style: TextStyle(fontSize: 13, color: ext.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
           Text(
-            'field_volunteer.terms_title'.tr(),
+            widget.campaign.displayTitle,
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: cs.onSurface,
-            ),
-          ),
-          const SizedBox(height: 10),
-          InkWell(
-            onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: ext.inputFill,
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(
-                  color: _agreedToTerms ? cs.primary : ext.border,
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: _agreedToTerms,
-                    activeColor: cs.primary,
-                    onChanged: (v) =>
-                        setState(() => _agreedToTerms = v ?? false),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        'field_volunteer.terms_agree'.tr(),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: cs.onSurface,
-                          height: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          Text(
-            'field_volunteer.hours_title'.tr(),
-            style: TextStyle(
-              fontSize: 16,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               color: cs.onSurface,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'field_volunteer.hours_hint'.tr(),
-            style: TextStyle(fontSize: 13, color: ext.textSecondary),
+            widget.campaign.displayLocation,
+            style: TextStyle(color: ext.textSecondary),
           ),
-          const SizedBox(height: 16),
-          ..._days.map((day) => _DayScheduleCard(
-                dayKey: day,
-                slots: _slots,
-                selected: _selectedSlots[day] ?? {},
-                onToggle: (slot) => _toggleSlot(day, slot),
-              )),
-          const SizedBox(height: 28),
-          CustomButton(
-            label: 'field_volunteer.confirm_attendance'.tr(),
-            variant: ButtonVariant.primary,
-            icon: Icons.check_circle_outline,
-            height: 54,
-            onTap: _confirm,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DayScheduleCard extends StatelessWidget {
-  const _DayScheduleCard({
-    required this.dayKey,
-    required this.slots,
-    required this.selected,
-    required this.onToggle,
-  });
-
-  final String dayKey;
-  final List<String> slots;
-  final Set<String> selected;
-  final ValueChanged<String> onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final ext = Theme.of(context).extension<AppThemeExtension>()!;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: ext.cardBackground,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-        border: Border.all(color: ext.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          const SizedBox(height: 12),
           Text(
-            dayKey.tr(),
+            'field_volunteer.pending_note'.tr(),
+            style: TextStyle(color: ext.textSecondary, height: 1.4),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'field_volunteer.hours_title'.tr(),
             style: TextStyle(
               fontWeight: FontWeight.w700,
+              fontSize: 15,
               color: cs.onSurface,
             ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: slots.map((slot) {
-              final isSelected = selected.contains(slot);
-              return FilterChip(
-                label: Text(slot.tr()),
-                selected: isSelected,
-                onSelected: (_) => onToggle(slot),
-                selectedColor: AppColors.accent.withValues(alpha: 0.35),
-                checkmarkColor: AppColors.primaryDark,
-                labelStyle: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: cs.onSurface,
-                ),
-                side: BorderSide(
-                  color: isSelected ? AppColors.accent : ext.border,
-                ),
-              );
-            }).toList(),
+          const SizedBox(height: 12),
+          ..._days.map((day) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    day.tr(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: ext.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _slots.map((slot) {
+                      final selected =
+                          _selectedSlots[day]?.contains(slot) ?? false;
+                      return FilterChip(
+                        label: Text(slot.tr()),
+                        selected: selected,
+                        onSelected: (_) => _toggleSlot(day, slot),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _agreedToTerms,
+            onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: Text('field_volunteer.terms_agree'.tr()),
+          ),
+          const SizedBox(height: 16),
+          CustomButton(
+            label: _submitting
+                ? '...'
+                : 'field_volunteer.submit_application'.tr(),
+            onTap: _submitting ? null : _confirm,
+            variant: ButtonVariant.accent,
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import 'wallet_currencies.dart';
+
 class UserProfileModel {
   final int? id;
   final String firstName;
@@ -25,24 +27,12 @@ class UserProfileModel {
 
   String get fullName => '${firstName.trim()} ${lastName.trim()}'.trim();
 
-  /// Prefer USD, otherwise first positive balance, otherwise USD 0.
-  ({double amount, String currency}) get primaryWallet {
-    final usd = balances['USD'];
-    if (usd != null) return (amount: usd, currency: 'USD');
+  Map<String, double> get walletBalances =>
+      WalletCurrencies.normalize(balances);
 
-    for (final entry in balances.entries) {
-      if (entry.value > 0) {
-        return (amount: entry.value, currency: entry.key);
-      }
-    }
-
-    if (balances.isNotEmpty) {
-      final first = balances.entries.first;
-      return (amount: first.value, currency: first.key);
-    }
-
-    return (amount: 0, currency: 'USD');
-  }
+  List<String> get fundedCurrencyCodes => WalletCurrencies.codes
+      .where((code) => (balances[code] ?? 0) > 0)
+      .toList();
 
   factory UserProfileModel.fromJson(Map<String, dynamic> json) {
     return UserProfileModel(
@@ -54,7 +44,7 @@ class UserProfileModel {
       address: json['address'] as String? ?? '',
       imagePath: json['image_path'] as String?,
       memberSinceYear: json['member_since_year'] as int? ?? 2022,
-      balances: _parseBalances(json['balances']),
+      balances: WalletCurrencies.parseAll(json),
     );
   }
 
@@ -77,7 +67,7 @@ class UserProfileModel {
       address: user['address']?.toString() ?? '',
       imagePath: imageUrl,
       memberSinceYear: memberYear,
-      balances: _parseBalances(user['balances']),
+      balances: WalletCurrencies.parseAll(user),
     );
   }
 
@@ -123,18 +113,5 @@ class UserProfileModel {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
     return null;
-  }
-
-  static Map<String, double> _parseBalances(dynamic raw) {
-    if (raw is! Map) return {};
-    final result = <String, double>{};
-    raw.forEach((key, value) {
-      if (key == null) return;
-      final amount = value is num
-          ? value.toDouble()
-          : double.tryParse(value?.toString() ?? '');
-      if (amount != null) result[key.toString()] = amount;
-    });
-    return result;
   }
 }

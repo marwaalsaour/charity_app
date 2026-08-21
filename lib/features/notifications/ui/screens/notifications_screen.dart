@@ -1,11 +1,13 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/user_role.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/services/notification_navigation.dart';
 import '../../data/models/app_notification_model.dart';
 import '../../logic/notifications_cubit.dart';
 import '../../logic/notifications_state.dart';
@@ -69,25 +71,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           if (state is NotificationsLoaded) {
-            if (state.notifications.isEmpty) {
-              return _EmptyView(role: widget.role);
-            }
-
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: state.notifications.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final item = state.notifications[index];
-                return _NotificationTile(
-                  notification: item,
-                  onTap: () {
-                    if (!item.isRead) {
-                      context.read<NotificationsCubit>().markAsRead(item.id);
-                    }
-                  },
-                );
-              },
+            return RefreshIndicator(
+              onRefresh: () =>
+                  context.read<NotificationsCubit>().refreshFromServer(),
+              child: state.notifications.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.sizeOf(context).height * 0.55,
+                          child: _EmptyView(role: widget.role),
+                        ),
+                      ],
+                    )
+                  : ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: state.notifications.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final item = state.notifications[index];
+                        return _NotificationTile(
+                          notification: item,
+                          onTap: () {
+                            if (!item.isRead) {
+                              context.read<NotificationsCubit>().markAsRead(
+                                item.id,
+                              );
+                            }
+                            final route = NotificationNavigation.resolveRoute({
+                              'type': item.type.firestoreValue,
+                              'role': item.audience.storageId,
+                            });
+                            final current = GoRouterState.of(context).uri.path;
+                            if (current != route) {
+                              context.go(route);
+                            }
+                          },
+                        );
+                      },
+                    ),
             );
           }
 
@@ -153,7 +176,9 @@ class _NotificationTile extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            notification.titleKey.tr(),
+                            notification.hasPlainText
+                                ? notification.displayTitle
+                                : notification.titleKey.tr(),
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 15,
@@ -174,9 +199,11 @@ class _NotificationTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      notification.bodyKey.tr(
-                        namedArgs: notification.bodyArgs,
-                      ),
+                      notification.hasPlainText
+                          ? notification.displayBody
+                          : notification.bodyKey.tr(
+                              namedArgs: notification.bodyArgs,
+                            ),
                       style: TextStyle(
                         fontSize: 13,
                         height: 1.4,
@@ -236,6 +263,10 @@ class _NotificationTile extends StatelessWidget {
           Icons.highlight_off,
           AppColors.error,
         ),
+      AppNotificationType.caseFullyFunded => _NotificationStyle(
+        Icons.verified_outlined,
+        AppColors.success,
+      ),
       AppNotificationType.general => _NotificationStyle(
           Icons.notifications_none,
           cs.primary,

@@ -77,7 +77,7 @@ class SearchSuggestionHelper {
     final scored = <_ScoredSuggestion>[];
 
     for (final campaign in campaigns) {
-      final title = campaign.titleKey.tr().toLowerCase();
+      final title = campaign.displayTitle.toLowerCase();
       final category = campaign.categoryLabelKey.tr().toLowerCase();
       final score = _matchScore(query, title, category);
       if (score > 0) {
@@ -144,8 +144,8 @@ class SearchSuggestionHelper {
 
   static SearchSuggestion _campaignSuggestion(CampaignModel campaign) {
     return SearchSuggestion(
-      label: campaign.titleKey.tr(),
-      query: campaign.titleKey.tr(),
+      label: campaign.displayTitle,
+      query: campaign.displayTitle,
       kind: SuggestionKind.campaign,
       icon: Icons.favorite_outline,
       subtitle: campaign.categoryLabelKey.tr(),

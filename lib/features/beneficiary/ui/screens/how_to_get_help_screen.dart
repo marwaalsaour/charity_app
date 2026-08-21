@@ -1,9 +1,12 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
+import '../../../../core/router/app_routes.dart';
 
 class HowToGetHelpScreen extends StatelessWidget {
   const HowToGetHelpScreen({super.key});
@@ -17,9 +20,9 @@ class HowToGetHelpScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor:
           isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: AppBar(
-        title: Text('how_to_get_help'.tr()),
-        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      appBar: AtaaAppBar(
+        title: 'how_to_get_help'.tr(),
+        onBack: () => context.go(AppRoutes.beneficiaryHome),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),

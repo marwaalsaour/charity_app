@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../../profile/data/models/wallet_currencies.dart';
 import 'donation_checkout_args.dart';
 import 'donation_need_item.dart';
 
@@ -72,6 +73,9 @@ class DonationModel {
   /// School or university name (education cases).
   final String? institution;
 
+  /// Currency the case was published in. Same for donor and beneficiary.
+  final String currency;
+
   const DonationModel({
     required this.id,
     required this.nameKey,
@@ -97,14 +101,19 @@ class DonationModel {
     this.beneficiaryName,
     this.residence,
     this.institution,
+    this.currency = 'USD',
   });
+
+  String get displayCurrency =>
+      WalletCurrencies.normalizeCode(currency) ?? 'USD';
 
   double get progress =>
       goal > 0 ? (raised / goal).clamp(0.0, 1.0) : 0.0;
 
+  bool get isFullyFunded => goal > 0 && raised >= goal;
+
   int get donorCount => donorsCount ?? 0;
 
-  /// Remaining days until deadline. Defaults to 30 days from now when unknown.
   int get daysLeft {
     final end = deadlineAt ?? DateTime.now().add(const Duration(days: 30));
     final today = DateTime.now();
@@ -114,22 +123,40 @@ class DonationModel {
     return days < 0 ? 0 : days;
   }
 
-  /// Card title: consented name, else case title / fallback.
   String get cardTitle {
-    if (showBeneficiaryName &&
-        beneficiaryName != null &&
-        beneficiaryName!.trim().isNotEmpty) {
+    if (beneficiaryName != null && beneficiaryName!.trim().isNotEmpty) {
       return beneficiaryName!.trim();
     }
     return displayName;
   }
 
   bool get hasVerificationInfo =>
-      (showBeneficiaryName &&
-          beneficiaryName != null &&
-          beneficiaryName!.trim().isNotEmpty) ||
+      (beneficiaryName != null && beneficiaryName!.trim().isNotEmpty) ||
       (residence != null && residence!.trim().isNotEmpty) ||
       (institution != null && institution!.trim().isNotEmpty);
+
+  String formatMoney(double amount, [Locale? locale]) {
+    return WalletCurrencies.format(
+      amount,
+      displayCurrency,
+      locale: locale ?? const Locale('en'),
+    );
+  }
+
+  String formatRaised([Locale? locale]) => formatMoney(raised, locale);
+
+  String formatGoal([Locale? locale]) => formatMoney(goal, locale);
+
+  DonationCheckoutArgs get checkoutArgs => DonationCheckoutArgs(
+        causeTitle: cardTitle,
+        targetType: donateTargetType,
+        targetId: id > 0 ? id : null,
+        caseCurrency: displayCurrency,
+      );
+
+  DonationCheckoutArgs get sponsorshipCheckoutArgs => checkoutArgs.copyWith(
+        isOrphanSponsorship: true,
+      );
 
   DonationModel copyWith({
     int? id,
@@ -149,6 +176,7 @@ class DonationModel {
     String? beneficiaryName,
     String? residence,
     String? institution,
+    String? currency,
   }) {
     return DonationModel(
       id: id ?? this.id,
@@ -175,6 +203,7 @@ class DonationModel {
       beneficiaryName: beneficiaryName ?? this.beneficiaryName,
       residence: residence ?? this.residence,
       institution: institution ?? this.institution,
+      currency: currency ?? this.currency,
     );
   }
 
@@ -201,6 +230,10 @@ class DonationModel {
       goal: (json['goal'] as num).toDouble(),
       image: json['image'] as String? ?? '',
       isUrgent: json['is_urgent'] as bool? ?? false,
+      currency: WalletCurrencies.normalizeCode(
+            json['currency']?.toString(),
+          ) ??
+          'USD',
     );
   }
 }

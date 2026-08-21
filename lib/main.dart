@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ import 'core/services/firebase_bootstrap.dart';
 import 'core/services/notification_navigation.dart';
 import 'core/services/notification_service.dart';
 import 'features/home/logic/home_cubit.dart';
+import 'features/notifications/data/repositories/notification_repository.dart';
 import 'features/notifications/logic/notifications_cubit.dart';
 
 Future<String> _resolveInitialLocation(SharedPreferences prefs) async {
@@ -38,6 +40,13 @@ void main() async {
   final savedRole = prefs.getString('user_role');
   final role = UserRole.fromString(savedRole)?.name ?? UserRole.donor.name;
   final initialLocation = await _resolveInitialLocation(prefs);
+
+  // Background FCM must be registered before runApp.
+  await initializeFirebaseApp();
+  await NotificationService.ensureAndroidChannel();
+  if (NotificationRepository.firebaseReady) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  }
 
   runApp(
     EasyLocalization(
@@ -69,24 +78,38 @@ class AtaaApp extends StatefulWidget {
   State<AtaaApp> createState() => _AtaaAppState();
 }
 
-class _AtaaAppState extends State<AtaaApp> {
+class _AtaaAppState extends State<AtaaApp> with WidgetsBindingObserver {
   late final GoRouter _router =
       createAppRouter(initialLocation: widget.initialLocation);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     NotificationService.instance.onNotificationOpened = _onNotificationOpened;
-    // Defer Firebase/FCM so the first frame paints immediately.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _bootstrapNotifications();
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      NotificationService.instance.onAppResumed();
+    }
+  }
+
   Future<void> _bootstrapNotifications() async {
     await initializeFirebaseApp();
+    await NotificationService.instance.setupFcmTapHandlers();
     await bootstrapFirebase(role: widget.bootstrapRole);
-    await NotificationService.instance.setupInteractedMessage();
+    await NotificationService.instance.setupLocalLaunchHandlers();
   }
 
   Future<void> _onNotificationOpened(Map<String, dynamic> data) async {

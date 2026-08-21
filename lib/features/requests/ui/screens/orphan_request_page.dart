@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/image_upload_box.dart';
@@ -112,11 +113,7 @@ class _OrphanRequestPageState extends State<OrphanRequestPage> {
     return Scaffold(
       backgroundColor:
           isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: AppBar(
-        title: Text('orphan_request_title'.tr()),
-        backgroundColor:
-            isDark ? AppColors.darkSurface : AppColors.lightSurface,
-      ),
+      appBar: AtaaAppBar(title: 'orphan_request_title'.tr()),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [

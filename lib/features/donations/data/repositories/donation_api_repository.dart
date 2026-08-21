@@ -48,6 +48,9 @@ class DonationApiRepository {
       final donationId = data['donation_id']?.toString() ??
           DateTime.now().millisecondsSinceEpoch.toString();
 
+      final caseDonors = data['donors_count'];
+      final caseRaised = data['donated_amount'];
+
       return DonationReceiptModel(
         id: donationId,
         donorName: donorName,
@@ -57,6 +60,8 @@ class DonationApiRepository {
         currency: currency,
         date: DateTime.now(),
         agent: 'receipt_agent_value',
+        caseDonorsCount: caseDonors is num ? caseDonors.toInt() : null,
+        caseRaisedAmount: caseRaised is num ? caseRaised.toDouble() : null,
       );
     } on DioException catch (e) {
       throw _mapError(e);

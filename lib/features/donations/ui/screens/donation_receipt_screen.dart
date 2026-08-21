@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../data/models/donation_receipt_model.dart';
 
@@ -24,9 +25,7 @@ class DonationReceiptScreen extends StatelessWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('donation_receipt_title'.tr()),
-      ),
+      appBar: AtaaAppBar(title: 'donation_receipt_title'.tr()),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

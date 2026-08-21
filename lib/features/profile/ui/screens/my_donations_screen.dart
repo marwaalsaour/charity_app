@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../donations/data/models/donation_receipt_model.dart';
 import '../../../donations/data/repositories/donation_api_repository.dart';
 import '../../../donations/data/repositories/donation_receipt_repository.dart';
@@ -109,9 +110,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('my_donations'.tr()),
-      ),
+      appBar: AtaaAppBar(title: 'my_donations'.tr()),
       body: FutureBuilder<List<DonationReceiptModel>>(
         future: _receiptsFuture,
         builder: (context, snapshot) {

@@ -6,9 +6,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/widgets/image_upload_box.dart';
+import '../../../profile/data/models/wallet_currencies.dart';
 import '../../data/models/benefit_request_models.dart';
 import '../../logic/cubit/request_cubit.dart';
 import '../widgets/request_form_card.dart';
@@ -31,6 +33,7 @@ class _MedicalRequestPageState extends State<MedicalRequestPage> {
   File? idPhoto;
   File? medicalReport;
   bool showBeneficiaryName = false;
+  String _currency = 'USD';
 
   @override
   void dispose() {
@@ -93,6 +96,7 @@ class _MedicalRequestPageState extends State<MedicalRequestPage> {
         phone: phone,
         email: email,
         requiredAmount: double.tryParse(cost.text),
+        currency: _currency,
         medicalReport: medicalReport,
         nationalIdDocument: idPhoto,
         showBeneficiaryName: showBeneficiaryName,
@@ -190,6 +194,29 @@ class _MedicalRequestPageState extends State<MedicalRequestPage> {
                 prefixIcon: Icons.attach_money,
                 controller: cost,
                 keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'request_currency_label'.tr(),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context)
+                      .extension<AppThemeExtension>()
+                      ?.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: WalletCurrencies.codes.map((code) {
+                  final selected = _currency == code;
+                  return ChoiceChip(
+                    label: Text(code),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _currency = code),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 8),
               ShowNameConsentTile(

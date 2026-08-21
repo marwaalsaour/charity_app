@@ -5,12 +5,14 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/utils/share_link_helper.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
-import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
 import '../../data/models/donation_need_item.dart';
+import '../../../profile/data/models/wallet_currencies.dart';
 import '../utils/donation_flow_helper.dart';
 import '../widgets/case_verification_info.dart';
+import '../widgets/donation_closed_box.dart';
 import '../widgets/donation_cover_image.dart';
 
 class EducationDonationDetailsScreen extends StatelessWidget {
@@ -25,23 +27,15 @@ class EducationDonationDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final percent = (donation.progress * 100).round();
-    final goalText = '\$${donation.goal.toInt()}';
+    final goalText = donation.formatGoal(context.locale);
 
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
-        title: Text(
-          'education_details_title'.tr(),
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-        ),
+      appBar: AtaaAppBar(
+        title: 'donation_details_title'.tr(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
+            icon: const Icon(Icons.share_outlined, color: Colors.white),
             onPressed: () => ShareLinkHelper.copyCaseLink(context, donation),
           ),
         ],
@@ -97,7 +91,10 @@ class EducationDonationDetailsScreen extends StatelessWidget {
                           const SizedBox(height: 20),
                           _SectionHeader(title: 'needs_breakdown'.tr()),
                           const SizedBox(height: 12),
-                          _NeedsBreakdownCard(needs: donation.needs),
+                          _NeedsBreakdownCard(
+                            needs: donation.needs,
+                            currency: donation.displayCurrency,
+                          ),
                         ],
                       ],
                     ),
@@ -107,21 +104,16 @@ class EducationDonationDetailsScreen extends StatelessWidget {
             ),
           ),
           _DonateBar(
+            isClosed: donation.isFullyFunded,
             onTap: () async {
+              if (donation.isFullyFunded) return;
               if (onDonate != null) {
                 await onDonate!();
                 return;
               }
               await openDonateAmountScreen(
                 context,
-                DonationCheckoutArgs(
-                  causeTitle: donation.cardTitle,
-                  targetType: donation.donateTargetType,
-                  targetId:
-                      donation.donateTargetType == DonationTargetType.request
-                          ? donation.id
-                          : null,
-                ),
+                donation.checkoutArgs,
               );
             },
           ),
@@ -208,7 +200,7 @@ class _InfoCard extends StatelessWidget {
                     ),
                     children: [
                       TextSpan(
-                        text: '\$${donation.raised.toInt()} ',
+                        text: '${donation.formatRaised(context.locale)} ',
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           color: cs.primary,
@@ -374,9 +366,10 @@ class _TechRequirementsCard extends StatelessWidget {
 }
 
 class _NeedsBreakdownCard extends StatelessWidget {
-  const _NeedsBreakdownCard({required this.needs});
+  const _NeedsBreakdownCard({required this.needs, required this.currency});
 
   final List<DonationNeedItem> needs;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -393,7 +386,7 @@ class _NeedsBreakdownCard extends StatelessWidget {
         children: [
           for (var i = 0; i < needs.length; i++) ...[
             if (i > 0) Divider(height: 20, color: ext.border),
-            _NeedRow(need: needs[i]),
+            _NeedRow(need: needs[i], currency: currency),
           ],
         ],
       ),
@@ -402,9 +395,10 @@ class _NeedsBreakdownCard extends StatelessWidget {
 }
 
 class _NeedRow extends StatelessWidget {
-  const _NeedRow({required this.need});
+  const _NeedRow({required this.need, required this.currency});
 
   final DonationNeedItem need;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -435,7 +429,11 @@ class _NeedRow extends StatelessWidget {
           ),
         ),
         Text(
-          '\$${need.amount.toInt()}',
+          WalletCurrencies.format(
+            need.amount.toDouble(),
+            currency,
+            locale: context.locale,
+          ),
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 15,
@@ -469,9 +467,10 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _DonateBar extends StatelessWidget {
-  const _DonateBar({required this.onTap});
+  const _DonateBar({required this.onTap, this.isClosed = false});
 
   final VoidCallback onTap;
+  final bool isClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -493,12 +492,14 @@ class _DonateBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: CustomButton(
-          label: 'donate_now'.tr(),
-          variant: ButtonVariant.accent,
-          height: 54,
-          onTap: onTap,
-        ),
+        child: isClosed
+            ? const DonationClosedBox()
+            : CustomButton(
+                label: 'donate_now'.tr(),
+                variant: ButtonVariant.accent,
+                height: 54,
+                onTap: onTap,
+              ),
       ),
     );
   }

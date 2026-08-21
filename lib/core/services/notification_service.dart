@@ -6,7 +6,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../../features/auth/data/repositories/auth_repository.dart';
 import '../../features/notifications/data/repositories/notification_repository.dart';
+import '../../core/network/token_storage.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -24,6 +26,8 @@ class NotificationService {
   FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   final _localNotifications = FlutterLocalNotificationsPlugin();
   final _repository = NotificationRepository.instance;
+  final _authRepository = AuthRepository();
+  final _tokenStorage = TokenStorage();
 
   static const _channelId = 'ataa_default_channel';
   static const _channelName = 'ATAA Notifications';
@@ -32,6 +36,11 @@ class NotificationService {
   bool _localReady = false;
   bool _interactionSetup = false;
   NotificationOpenCallback? onNotificationOpened;
+
+  /// Creates the Android notification channel before [runApp].
+  static Future<void> ensureAndroidChannel() {
+    return instance._setupLocalNotifications();
+  }
 
   Future<void> init({required String role}) async {
     if (_initialized) return;
@@ -45,19 +54,11 @@ class NotificationService {
       try {
         final token = await _messaging.getToken();
         if (token != null) {
-          await _repository.saveFcmToken(
-            userId: role,
-            token: token,
-            role: role,
-          );
+          await _persistFcmToken(token: token, role: role);
         }
 
         _messaging.onTokenRefresh.listen((token) async {
-          await _repository.saveFcmToken(
-            userId: role,
-            token: token,
-            role: role,
-          );
+          await _persistFcmToken(token: token, role: role);
         });
       } catch (e, stack) {
         debugPrint('FCM token setup failed: $e\n$stack');
@@ -65,6 +66,26 @@ class NotificationService {
     }
 
     _initialized = true;
+  }
+
+  Future<void> _persistFcmToken({
+    required String token,
+    required String role,
+  }) async {
+    await _repository.saveFcmToken(
+      userId: role,
+      token: token,
+      role: role,
+    );
+
+    // Also register the token on Laravel when the user is signed in.
+    if (await _tokenStorage.hasToken()) {
+      try {
+        await _authRepository.updateFcmToken(token);
+      } catch (e, stack) {
+        debugPrint('Laravel updateFcmToken failed: $e\n$stack');
+      }
+    }
   }
 
   /// Shows a system-tray notification on the device (works in background shade).
@@ -81,6 +102,16 @@ class NotificationService {
       body: body,
       payload: jsonEncode(data),
     );
+  }
+
+  Future<void> onAppResumed() async {}
+
+  Future<void> setupFcmTapHandlers() => setupInteractedMessage();
+
+  Future<void> setupLocalLaunchHandlers() async {
+    if (!_localReady) {
+      await _setupLocalNotifications();
+    }
   }
 
   /// Handles taps that open the app from terminated / background FCM messages.

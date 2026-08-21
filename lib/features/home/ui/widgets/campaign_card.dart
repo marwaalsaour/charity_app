@@ -5,10 +5,11 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../donations/data/models/donation_model.dart';
+import '../../../donations/ui/widgets/donation_closed_box.dart';
 
 class CampaignCard extends StatelessWidget {
   static const double cardWidth = 248;
-  static const double cardHeight = 292;
+  static const double cardHeight = 318;
   static const double imageHeight = 132;
 
   final String title;
@@ -19,6 +20,7 @@ class CampaignCard extends StatelessWidget {
   final String goal;
   final DonationModel? donation;
   final VoidCallback? onDonateTap;
+  final VoidCallback? onSponsorTap;
   final VoidCallback? onTap;
 
   const CampaignCard({
@@ -31,6 +33,7 @@ class CampaignCard extends StatelessWidget {
     required this.goal,
     this.donation,
     this.onDonateTap,
+    this.onSponsorTap,
     this.onTap,
   });
 
@@ -40,8 +43,12 @@ class CampaignCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final cs = theme.colorScheme;
     final ext = theme.extension<AppThemeExtension>()!;
-    final raised = donation?.raised;
     final percent = progressPercent.clamp(0, 100).toInt();
+    final closed = donation?.isFullyFunded ?? progress >= 1;
+    final linked = donation;
+    final raisedGoalText = linked != null
+        ? '${linked.formatRaised(context.locale)} / ${linked.formatGoal(context.locale)}'
+        : goal;
 
     return GestureDetector(
       onTap: onTap,
@@ -168,61 +175,100 @@ class CampaignCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    if (closed)
+                      const DonationClosedBox(height: 32, compact: true)
+                    else if (donation?.category == DonationCategory.orphans)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            raisedGoalText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: cs.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
                             children: [
-                              Text(
-                                'goal'.tr(),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: ext.textSecondary,
-                                  fontWeight: FontWeight.w500,
+                              Expanded(
+                                child: _MiniActionButton(
+                                  label: 'donate_now'.tr(),
+                                  background: AppColors.primary,
+                                  foreground: Colors.white,
+                                  onTap: onDonateTap,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                raised != null
-                                    ? '\$${raised.toInt()} / $goal'
-                                    : goal,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: cs.onSurface,
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: _MiniActionButton(
+                                  label: 'sponsor_now'.tr(),
+                                  background: AppColors.accent,
+                                  foreground: Colors.black87,
+                                  onTap: onSponsorTap,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Material(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(10),
-                          child: InkWell(
-                            onTap: onDonateTap,
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'goal'.tr(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: ext.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  raisedGoalText,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.onSurface,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Material(
+                            color: AppColors.primary,
                             borderRadius: BorderRadius.circular(10),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              child: Text(
-                                'donate_now'.tr(),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
+                            child: InkWell(
+                              onTap: onDonateTap,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  'donate_now'.tr(),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -261,6 +307,45 @@ class CampaignCard extends StatelessWidget {
       memCacheWidth: 500,
       placeholder: (_, _) => placeholder,
       errorWidget: (_, _, _) => placeholder,
+    );
+  }
+}
+
+class _MiniActionButton extends StatelessWidget {
+  const _MiniActionButton({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: foreground,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

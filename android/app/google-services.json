@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "456967399302",
-    "project_id": "ataa-chairty",
-    "storage_bucket": "ataa-chairty.firebasestorage.app"
+    "project_number": "815647950638",
+    "project_id": "ataa-charity-f85b4",
+    "storage_bucket": "ataa-charity-f85b4.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:456967399302:android:686beb43840cef1dd2ee07",
+        "mobilesdk_app_id": "1:815647950638:android:6bda00e15d95f85fd31cbf",
         "android_client_info": {
           "package_name": "com.example.charity_app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAb8FfW2D8VZ6z_4bsFsK0VPsif7he2L-0"
+          "current_key": "AIzaSyDkhO1cdH7R6ivUKKOY6PchteVHOOUYoSY"
         }
       ],
       "services": {

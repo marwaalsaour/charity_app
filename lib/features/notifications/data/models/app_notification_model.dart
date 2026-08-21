@@ -6,6 +6,7 @@ enum AppNotificationType {
   requestSubmitted,
   beneficiaryApproved,
   beneficiaryRejected,
+  caseFullyFunded,
   general,
 }
 
@@ -45,6 +46,10 @@ class AppNotificationModel {
   final bool isRead;
   final DateTime createdAt;
 
+  /// Plain text from Laravel `/mynotifications` (preferred over keys when set).
+  final String? titleText;
+  final String? bodyText;
+
   const AppNotificationModel({
     required this.id,
     required this.userId,
@@ -55,7 +60,16 @@ class AppNotificationModel {
     this.bodyArgs = const {},
     this.isRead = false,
     required this.createdAt,
+    this.titleText,
+    this.bodyText,
   });
+
+  String get displayTitle => titleText ?? titleKey;
+  String get displayBody => bodyText ?? bodyKey;
+
+  bool get hasPlainText =>
+      (titleText != null && titleText!.isNotEmpty) ||
+      (bodyText != null && bodyText!.isNotEmpty);
 
   factory AppNotificationModel.fromFirestore(
     String id,
@@ -77,6 +91,8 @@ class AppNotificationModel {
       ),
       isRead: data['isRead'] as bool? ?? false,
       createdAt: _parseDate(data['createdAt']),
+      titleText: data['titleText'] as String?,
+      bodyText: data['bodyText'] as String?,
     );
   }
 
@@ -97,6 +113,27 @@ class AppNotificationModel {
       ),
       isRead: json['isRead'] as bool? ?? false,
       createdAt: _parseDate(json['createdAt']),
+      titleText: json['titleText'] as String?,
+      bodyText: json['bodyText'] as String?,
+    );
+  }
+
+  factory AppNotificationModel.fromLaravel(
+    Map<String, dynamic> json, {
+    required NotificationAudience audience,
+  }) {
+    final typeRaw = json['type']?.toString();
+    return AppNotificationModel(
+      id: 'srv_${json['id']}',
+      userId: audience.storageId,
+      audience: audience,
+      type: AppNotificationTypeX.fromString(typeRaw),
+      titleKey: 'notification_general_title',
+      bodyKey: 'notification_general_body',
+      isRead: json['is_read'] == true || json['is_read'] == 1,
+      createdAt: _parseDate(json['created_at']),
+      titleText: json['title']?.toString(),
+      bodyText: json['body']?.toString(),
     );
   }
 
@@ -110,6 +147,8 @@ class AppNotificationModel {
         'bodyArgs': bodyArgs,
         'isRead': isRead,
         'createdAt': createdAt.toUtc().toIso8601String(),
+        if (titleText != null) 'titleText': titleText,
+        if (bodyText != null) 'bodyText': bodyText,
       };
 
   Map<String, dynamic> toFirestore() => {
@@ -121,6 +160,8 @@ class AppNotificationModel {
         'bodyArgs': bodyArgs,
         'isRead': isRead,
         'createdAt': createdAt.toUtc().toIso8601String(),
+        if (titleText != null) 'titleText': titleText,
+        if (bodyText != null) 'bodyText': bodyText,
       };
 
   AppNotificationModel copyWith({bool? isRead}) {
@@ -134,6 +175,8 @@ class AppNotificationModel {
       bodyArgs: bodyArgs,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt,
+      titleText: titleText,
+      bodyText: bodyText,
     );
   }
 

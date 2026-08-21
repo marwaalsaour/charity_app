@@ -66,7 +66,7 @@ class CommunityCampaignCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        campaign.titleKey.tr(),
+                        campaign.displayTitle,
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
@@ -75,7 +75,7 @@ class CommunityCampaignCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        campaign.categoryKey.tr().toUpperCase(),
+                        campaign.displayCategory.toUpperCase(),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,

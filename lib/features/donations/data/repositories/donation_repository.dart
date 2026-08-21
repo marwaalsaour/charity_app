@@ -5,10 +5,12 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_constants.dart';
+import '../../../profile/data/models/wallet_currencies.dart';
+import '../../../requests/data/beneficiary_name_consent_cache.dart';
+import '../../../requests/data/models/benefit_request_models.dart';
 import '../case_donation_stats_cache.dart';
 import '../models/donation_checkout_args.dart';
 import '../models/donation_model.dart';
-import '../models/donation_need_item.dart';
 import '../open_accepted_cases_cache.dart';
 
 class DonationRepository {
@@ -19,13 +21,21 @@ class DonationRepository {
   /// Open accepted assistance requests for donors (home + category lists).
   ///
   /// Returns API data when the call succeeds (even if empty).
-  /// Falls back to mocks only when the API is unreachable / errors.
+  /// Returns an empty list when every source fails — no demo cases.
   Future<List<DonationModel>> getDonations(DonationCategory category) async {
     final all = await getAllOpenAccepted();
-    if (all != null) {
-      return all.where((e) => e.category == category).toList();
+    if (all == null) return const [];
+    return all.where((e) => e.category == category).toList();
+  }
+
+  Future<DonationModel?> getById(int id) async {
+    if (id <= 0) return null;
+    final all = await getAllOpenAccepted();
+    if (all == null) return null;
+    for (final item in all) {
+      if (item.id == id) return item;
     }
-    return _mockDonations(category);
+    return null;
   }
 
   /// All open accepted cases across types — preferred source for home.
@@ -39,7 +49,7 @@ class DonationRepository {
     if (combined != null) {
       anySuccess = true;
       for (final item in combined) {
-        byId[item.id] = item;
+        byId[item.id] = _mergeDonationConsent(byId[item.id], item);
       }
     }
 
@@ -53,7 +63,7 @@ class DonationRepository {
       if (list == null) continue;
       anySuccess = true;
       for (final item in list) {
-        byId[item.id] = item;
+        byId[item.id] = _mergeDonationConsent(byId[item.id], item);
       }
     }
 
@@ -66,7 +76,7 @@ class DonationRepository {
       if (category == null) continue;
       final mapped = _mapRequest(json, category);
       if (mapped == null) continue;
-      byId.putIfAbsent(mapped.id, () => mapped);
+      byId[mapped.id] = _mergeDonationConsent(byId[mapped.id], mapped);
       anySuccess = true;
     }
 
@@ -80,7 +90,47 @@ class DonationRepository {
 
     final items = byId.values.toList()
       ..sort((a, b) => b.id.compareTo(a.id));
-    return _enrichWithLocalStats(items);
+    final withConsent = await _applyStoredNameConsent(items);
+    return _enrichWithLocalStats(withConsent);
+  }
+
+  DonationModel _mergeDonationConsent(DonationModel? existing, DonationModel incoming) {
+    if (existing == null) return incoming;
+    final show = existing.showBeneficiaryName || incoming.showBeneficiaryName;
+    final incomingName = incoming.beneficiaryName?.trim();
+    final existingName = existing.beneficiaryName?.trim();
+    final name = (incomingName != null && incomingName.isNotEmpty)
+        ? incomingName
+        : existingName;
+    return incoming.copyWith(
+      showBeneficiaryName: show,
+      beneficiaryName: name,
+      raised: math.max(existing.raised, incoming.raised),
+      donorsCount: math.max(existing.donorCount, incoming.donorCount),
+      nameKey: show && name != null && name.isNotEmpty ? name : incoming.nameKey,
+    );
+  }
+
+  Future<List<DonationModel>> _applyStoredNameConsent(
+    List<DonationModel> items,
+  ) async {
+    if (items.isEmpty) return items;
+    final result = <DonationModel>[];
+    for (final item in items) {
+      final stored = await BeneficiaryNameConsentCache.get(item.id);
+      if (stored == null || !stored.showName || stored.name.isEmpty) {
+        result.add(item);
+        continue;
+      }
+      result.add(
+        item.copyWith(
+          showBeneficiaryName: true,
+          beneficiaryName: stored.name,
+          nameKey: stored.name,
+        ),
+      );
+    }
+    return result;
   }
 
   Future<List<DonationModel>> _enrichWithLocalStats(
@@ -100,6 +150,9 @@ class DonationRepository {
         item.copyWith(
           donorsCount: math.max(item.donorCount, local?.donorsCount ?? 0),
           raised: math.max(item.raised, local?.raised ?? 0),
+          currency: item.currency.isNotEmpty
+              ? item.currency
+              : (local?.caseCurrency ?? 'USD'),
         ),
       );
     }
@@ -121,12 +174,17 @@ class DonationRepository {
       'personal_picture': item.image,
       'status': 'accepted',
       'status_request': 'open',
-      'show_beneficiary_name': item.showBeneficiaryName,
-      'beneficiary_public_name': item.beneficiaryName,
+      if (item.beneficiaryName != null && item.beneficiaryName!.trim().isNotEmpty) ...{
+        'full_name': item.beneficiaryName,
+        'beneficiary_name': item.beneficiaryName,
+        'beneficiary_public_name': item.beneficiaryName,
+        'show_beneficiary_name': true,
+      },
       'residence': item.residence,
       'institution': item.institution,
       'deadline_at': item.deadlineAt?.toIso8601String(),
       'donors_count': item.donorsCount,
+      'currency': item.currency,
     };
   }
 
@@ -231,13 +289,23 @@ class DonationRepository {
         list.addAll(data['data'] as List);
       } else if (data['requests'] is List) {
         list.addAll(data['requests'] as List);
+      } else if (data['data'] is Map) {
+        final nested = Map<String, dynamic>.from(data['data'] as Map);
+        if (nested['id'] != null) {
+          list.add(nested);
+        }
+        for (final value in nested.values) {
+          if (value is List) list.addAll(value);
+        }
       }
     }
 
     final result = <Map<String, dynamic>>[];
     for (final item in list) {
       if (item is! Map) continue;
-      result.add(Map<String, dynamic>.from(item));
+      result.add(
+        BenefitRequestItem.normalizeCaseJson(Map<String, dynamic>.from(item)),
+      );
     }
     return result;
   }
@@ -246,21 +314,15 @@ class DonationRepository {
     Map<String, dynamic> json,
     DonationCategory category,
   ) {
+    json = BenefitRequestItem.normalizeCaseJson(json);
     final id = _toInt(json['id']);
     if (id == null || id <= 0) return null;
 
     final beneficiary = json['beneficiary'];
     final beneficiaryMap =
         beneficiary is Map ? Map<String, dynamic>.from(beneficiary) : null;
-    final beneficiaryNameRaw = beneficiaryMap?['full_name']?.toString() ?? '';
 
-    final showName = _toBool(json['show_beneficiary_name']);
-    final publicName =
-        (json['beneficiary_public_name']?.toString().trim().isNotEmpty == true)
-            ? json['beneficiary_public_name'].toString().trim()
-            : (showName && beneficiaryNameRaw.trim().isNotEmpty
-                ? beneficiaryNameRaw.trim()
-                : null);
+    final publicName = BenefitRequestItem.extractSubmittedName(json);
 
     final residence = _resolveResidence(json, beneficiaryMap);
     final institution = _resolveInstitution(json);
@@ -292,6 +354,10 @@ class DonationRepository {
         _donationsListCount(json['donations']);
 
     final deadlineAt = _resolveDeadline(json);
+    final currency = WalletCurrencies.normalizeCode(
+          json['currency']?.toString(),
+        ) ??
+        'USD';
 
     return DonationModel(
       id: id,
@@ -312,6 +378,7 @@ class DonationRepository {
       beneficiaryName: publicName,
       residence: residence,
       institution: institution,
+      currency: currency,
     );
   }
 
@@ -357,16 +424,6 @@ class DonationRepository {
     return null;
   }
 
-  bool _toBool(dynamic value) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    if (value is String) {
-      final v = value.trim().toLowerCase();
-      return v == '1' || v == 'true' || v == 'yes';
-    }
-    return false;
-  }
-
   DateTime _resolveDeadline(Map<String, dynamic> json) {
     final explicit = _parseDate(json['deadline_at']?.toString());
     if (explicit != null) return explicit;
@@ -403,128 +460,5 @@ class DonationRepository {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
     return null;
-  }
-
-  List<DonationModel> _mockDonations(DonationCategory category) {
-    const all = [
-      DonationModel(
-        id: 1,
-        nameKey: 'donations.student_ahmed_name',
-        titleKey: 'donations.student_ahmed_title',
-        descriptionKey: 'donations.student_ahmed_story',
-        category: DonationCategory.education,
-        raised: 800,
-        goal: 1200,
-        image: 'assets/image/photo1.jpg',
-        needs: [
-          DonationNeedItem(
-            titleKey: 'donations.student_ahmed_need1_title',
-            descKey: 'donations.student_ahmed_need1_desc',
-            amount: 700,
-          ),
-          DonationNeedItem(
-            titleKey: 'donations.student_ahmed_need2_title',
-            descKey: 'donations.student_ahmed_need2_desc',
-            amount: 300,
-          ),
-          DonationNeedItem(
-            titleKey: 'donations.student_ahmed_need3_title',
-            descKey: 'donations.student_ahmed_need3_desc',
-            amount: 200,
-          ),
-        ],
-      ),
-      DonationModel(
-        id: 6,
-        nameKey: 'donations.student_nour_name',
-        titleKey: 'donations.student_nour_title',
-        descriptionKey: 'donations.student_nour_story',
-        category: DonationCategory.education,
-        raised: 420,
-        goal: 900,
-        image: 'https://picsum.photos/600/400?random=36',
-        isUrgent: true,
-        needs: [
-          DonationNeedItem(
-            titleKey: 'donations.student_nour_need1_title',
-            descKey: 'donations.student_nour_need1_desc',
-            amount: 400,
-          ),
-          DonationNeedItem(
-            titleKey: 'donations.student_nour_need2_title',
-            descKey: 'donations.student_nour_need2_desc',
-            amount: 300,
-          ),
-          DonationNeedItem(
-            titleKey: 'donations.student_nour_need3_title',
-            descKey: 'donations.student_nour_need3_desc',
-            amount: 200,
-          ),
-        ],
-      ),
-      DonationModel(
-        id: 7,
-        nameKey: 'donations.student_karim_name',
-        titleKey: 'donations.student_karim_title',
-        descriptionKey: 'donations.student_karim_story',
-        category: DonationCategory.education,
-        raised: 1840,
-        goal: 2400,
-        image: 'assets/image/photo2.jpg',
-        isUrgent: true,
-        techTitleKey: 'technical_requirements',
-        techDescKey: 'donations.student_karim_tech_desc',
-        techTagKeys: [
-          'donations.student_karim_tech_tag1',
-          'donations.student_karim_tech_tag2',
-        ],
-      ),
-      DonationModel(
-        id: 2,
-        nameKey: 'donations.patient_sara_name',
-        titleKey: 'donations.patient_sara_title',
-        descriptionKey: 'donations.patient_sara_story',
-        category: DonationCategory.medical,
-        raised: 1500,
-        goal: 3000,
-        image: 'assets/image/photo3.jpg',
-        isUrgent: true,
-        hospitalKey: 'donations.patient_sara_hospital',
-        doctorKey: 'donations.patient_sara_doctor',
-        storyKey: 'donations.patient_sara_full_story',
-      ),
-      DonationModel(
-        id: 3,
-        nameKey: 'donations.orphan_yusuf_name',
-        titleKey: 'donations.orphan_yusuf_title',
-        descriptionKey: 'donations.orphan_yusuf_desc',
-        category: DonationCategory.orphans,
-        raised: 2100,
-        goal: 5000,
-        image: 'assets/image/photo1.jpg',
-      ),
-      DonationModel(
-        id: 8,
-        nameKey: 'donations.orphan_layla_name',
-        titleKey: 'donations.orphan_layla_title',
-        descriptionKey: 'donations.orphan_layla_desc',
-        category: DonationCategory.orphans,
-        raised: 640,
-        goal: 1800,
-        image: 'https://picsum.photos/600/400?random=37',
-      ),
-      DonationModel(
-        id: 9,
-        nameKey: 'donations.orphan_mariam_name',
-        titleKey: 'donations.orphan_mariam_title',
-        descriptionKey: 'donations.orphan_mariam_desc',
-        category: DonationCategory.orphans,
-        raised: 920,
-        goal: 2400,
-        image: 'https://picsum.photos/600/400?random=38',
-      ),
-    ];
-
-    return all.where((item) => item.category == category).toList();
   }
 }

@@ -34,26 +34,27 @@ class HomeStatsRepository {
   static const _donorsCountKey = 'home_real_donors_count_v1';
 
   Future<HomeStats> fetchStats() async {
-    final fromHome = await _tryHomeStats();
-    final fromKpis = fromHome ?? await _tryDashboardKpis();
+    // GitHub backend has /dashboard/kpis (no /homestats).
+    final fromKpis = await _tryDashboardKpis();
+    final fromHome = fromKpis == null ? await _tryHomeStats() : null;
+    final fromApi = fromKpis ?? fromHome;
     final localDonors = await _readLocalDonorsCount();
     final receiptCount = (await _receiptRepository.getReceipts()).length;
 
-    final apiDonors = fromKpis?.donors ?? 0;
+    final apiDonors = fromApi?.donors ?? 0;
     final donors = math.max(
       apiDonors,
       math.max(localDonors, receiptCount),
     );
 
-    // Keep local counter aligned with the highest known value.
     if (donors > localDonors) {
       await _writeLocalDonorsCount(donors);
     }
 
     return HomeStats(
       donors: donors,
-      volunteers: fromKpis?.volunteers ?? 0,
-      beneficiaries: fromKpis?.beneficiaries ?? 0,
+      volunteers: fromApi?.volunteers ?? 0,
+      beneficiaries: fromApi?.beneficiaries ?? 0,
     );
   }
 
