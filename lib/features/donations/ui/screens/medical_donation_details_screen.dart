@@ -5,12 +5,14 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/utils/share_link_helper.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
-import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
 import '../../data/models/donation_need_item.dart';
+import '../../../profile/data/models/wallet_currencies.dart';
 import '../utils/donation_flow_helper.dart';
 import '../widgets/case_verification_info.dart';
+import '../widgets/donation_closed_box.dart';
 import '../widgets/donation_cover_image.dart';
 
 class MedicalDonationDetailsScreen extends StatelessWidget {
@@ -25,24 +27,16 @@ class MedicalDonationDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final percent = (donation.progress * 100).round();
-    final goalText = '\$${donation.goal.toInt()}';
+    final goalText = donation.formatGoal(context.locale);
     final daysLeft = donation.daysLeft;
 
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
-        title: Text(
-          'medical_details_title'.tr(),
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-        ),
+      appBar: AtaaAppBar(
+        title: 'donation_details_title'.tr(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
+            icon: const Icon(Icons.share_outlined, color: Colors.white),
             onPressed: () => ShareLinkHelper.copyCaseLink(context, donation),
           ),
         ],
@@ -102,7 +96,10 @@ class MedicalDonationDetailsScreen extends StatelessWidget {
                           const SizedBox(height: 20),
                           _SectionHeader(title: 'medical_needs'.tr()),
                           const SizedBox(height: 12),
-                          _MedicalNeedsList(needs: donation.needs),
+                          _MedicalNeedsList(
+                            needs: donation.needs,
+                            currency: donation.displayCurrency,
+                          ),
                         ],
                       ],
                     ),
@@ -112,21 +109,16 @@ class MedicalDonationDetailsScreen extends StatelessWidget {
             ),
           ),
           _DonateBar(
+            isClosed: donation.isFullyFunded,
             onTap: () async {
+              if (donation.isFullyFunded) return;
               if (onDonate != null) {
                 await onDonate!();
                 return;
               }
               await openDonateAmountScreen(
                 context,
-                DonationCheckoutArgs(
-                  causeTitle: donation.cardTitle,
-                  targetType: donation.donateTargetType,
-                  targetId:
-                      donation.donateTargetType == DonationTargetType.request
-                          ? donation.id
-                          : null,
-                ),
+                donation.checkoutArgs,
               );
             },
           ),
@@ -178,7 +170,7 @@ class _InfoCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  donation.displayName,
+                  donation.cardTitle,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -198,7 +190,7 @@ class _InfoCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '\$${donation.raised.toInt()}',
+                      donation.formatRaised(context.locale),
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -445,9 +437,10 @@ class _CareRow extends StatelessWidget {
 }
 
 class _MedicalNeedsList extends StatelessWidget {
-  const _MedicalNeedsList({required this.needs});
+  const _MedicalNeedsList({required this.needs, required this.currency});
 
   final List<DonationNeedItem> needs;
+  final String currency;
 
   static const _icons = [
     Icons.medication_outlined,
@@ -464,6 +457,7 @@ class _MedicalNeedsList extends StatelessWidget {
           _MedicalNeedTile(
             need: needs[i],
             icon: _icons[i % _icons.length],
+            currency: currency,
           ),
         ],
       ],
@@ -472,10 +466,15 @@ class _MedicalNeedsList extends StatelessWidget {
 }
 
 class _MedicalNeedTile extends StatelessWidget {
-  const _MedicalNeedTile({required this.need, required this.icon});
+  const _MedicalNeedTile({
+    required this.need,
+    required this.icon,
+    required this.currency,
+  });
 
   final DonationNeedItem need;
   final IconData icon;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -526,7 +525,11 @@ class _MedicalNeedTile extends StatelessWidget {
             ),
           ),
           Text(
-            '\$${need.amount.toInt()}',
+            WalletCurrencies.format(
+              need.amount.toDouble(),
+              currency,
+              locale: context.locale,
+            ),
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 15,
@@ -572,9 +575,10 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _DonateBar extends StatelessWidget {
-  const _DonateBar({required this.onTap});
+  const _DonateBar({required this.onTap, this.isClosed = false});
 
   final VoidCallback onTap;
+  final bool isClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -596,13 +600,15 @@ class _DonateBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: CustomButton(
-          label: 'donate_now'.tr(),
-          variant: ButtonVariant.accent,
-          icon: Icons.favorite_rounded,
-          height: 54,
-          onTap: onTap,
-        ),
+        child: isClosed
+            ? const DonationClosedBox()
+            : CustomButton(
+                label: 'donate_now'.tr(),
+                variant: ButtonVariant.accent,
+                icon: Icons.favorite_rounded,
+                height: 54,
+                onTap: onTap,
+              ),
       ),
     );
   }

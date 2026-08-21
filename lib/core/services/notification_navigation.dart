@@ -34,6 +34,8 @@ class NotificationNavigation {
       case 'beneficiaryApproved':
       case 'beneficiaryRejected':
         return AppRoutes.beneficiaryRequests;
+      case 'caseFullyFunded':
+        return AppRoutes.beneficiaryHome;
       default:
         return role == UserRole.beneficiary
             ? AppRoutes.beneficiaryNotifications

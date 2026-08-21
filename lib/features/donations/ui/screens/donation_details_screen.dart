@@ -5,12 +5,14 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/utils/share_link_helper.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../data/donation_stats_enricher.dart';
-import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_model.dart';
+import '../../data/repositories/donation_repository.dart';
 import '../utils/donation_flow_helper.dart';
 import '../widgets/case_verification_info.dart';
+import '../widgets/donation_closed_box.dart';
 import '../widgets/donation_cover_image.dart';
 import 'education_donation_details_screen.dart';
 import 'medical_donation_details_screen.dart';
@@ -36,7 +38,10 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
   }
 
   Future<void> _refreshStats() async {
-    final enriched = await enrichDonationWithLocalStats(widget.donation);
+    DonationModel base = widget.donation;
+    final fresh = await DonationRepository().getById(widget.donation.id);
+    if (fresh != null) base = fresh;
+    final enriched = await enrichDonationWithLocalStats(base);
     if (!mounted) return;
     setState(() {
       _donation = enriched;
@@ -45,13 +50,19 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
   }
 
   Future<void> _onDonate() async {
+    if (_donation.isFullyFunded) return;
     await openDonateAmountScreen(
       context,
-      DonationCheckoutArgs(
-        causeTitle: _donation.cardTitle,
-        targetType: _donation.donateTargetType,
-        targetId: _donation.id,
-      ),
+      _donation.checkoutArgs,
+    );
+    if (mounted) await _refreshStats();
+  }
+
+  Future<void> _onSponsor() async {
+    if (_donation.isFullyFunded) return;
+    await openDonateAmountScreen(
+      context,
+      _donation.sponsorshipCheckoutArgs,
     );
     if (mounted) await _refreshStats();
   }
@@ -79,6 +90,7 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
         return _StandardDonationDetailsScreen(
           donation: _donation,
           onDonate: _onDonate,
+          onSponsor: _onSponsor,
         );
     }
   }
@@ -88,10 +100,12 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
   const _StandardDonationDetailsScreen({
     required this.donation,
     required this.onDonate,
+    this.onSponsor,
   });
 
   final DonationModel donation;
   final Future<void> Function() onDonate;
+  final Future<void> Function()? onSponsor;
 
   @override
   Widget build(BuildContext context) {
@@ -104,18 +118,11 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
     final daysLeft = donation.daysLeft;
 
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
-        title: Text(
-          'donation_details_title'.tr(),
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-        ),
+      appBar: AtaaAppBar(
+        title: 'donation_details_title'.tr(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
+            icon: const Icon(Icons.share_outlined, color: Colors.white),
             onPressed: () => ShareLinkHelper.copyCaseLink(context, donation),
           ),
         ],
@@ -156,8 +163,7 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   _ProgressCard(
-                    raised: donation.raised,
-                    goal: donation.goal,
+                    donation: donation,
                     percent: percent,
                     donors: donors,
                     daysLeft: daysLeft,
@@ -195,13 +201,37 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
             ),
             child: SafeArea(
               top: false,
-              child: CustomButton(
-                label: 'donate_now'.tr(),
-                variant: ButtonVariant.accent,
-                icon: Icons.favorite_rounded,
-                height: 54,
-                onTap: onDonate,
-              ),
+              child: donation.isFullyFunded
+                  ? const DonationClosedBox()
+                  : onSponsor == null
+                      ? CustomButton(
+                          label: 'donate_now'.tr(),
+                          variant: ButtonVariant.accent,
+                          icon: Icons.favorite_rounded,
+                          height: 54,
+                          onTap: onDonate,
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: CustomButton(
+                                label: 'donate_now'.tr(),
+                                variant: ButtonVariant.primary,
+                                height: 54,
+                                onTap: onDonate,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: CustomButton(
+                                label: 'sponsor_now'.tr(),
+                                variant: ButtonVariant.accent,
+                                height: 54,
+                                onTap: onSponsor,
+                              ),
+                            ),
+                          ],
+                        ),
             ),
           ),
         ],
@@ -240,15 +270,13 @@ class _CategoryBadge extends StatelessWidget {
 
 class _ProgressCard extends StatelessWidget {
   const _ProgressCard({
-    required this.raised,
-    required this.goal,
+    required this.donation,
     required this.percent,
     required this.donors,
     required this.daysLeft,
   });
 
-  final double raised;
-  final double goal;
+  final DonationModel donation;
   final int percent;
   final int donors;
   final int daysLeft;
@@ -257,6 +285,8 @@ class _ProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
+    final raised = donation.raised;
+    final goal = donation.goal;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -270,8 +300,8 @@ class _ProgressCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '\$${raised.toInt()}',
+                Text(
+                donation.formatRaised(context.locale),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -309,7 +339,7 @@ class _ProgressCard extends StatelessWidget {
               ),
               Expanded(
                 child: _MiniStat(
-                  value: '\$${goal.toInt()}',
+                  value: donation.formatGoal(context.locale),
                   label: 'goal'.tr(),
                 ),
               ),

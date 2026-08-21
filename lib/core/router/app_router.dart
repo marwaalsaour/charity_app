@@ -24,11 +24,16 @@ import '../../features/donations/ui/screens/donation_details_screen.dart';
 import '../../features/donations/ui/screens/donation_list_screen.dart';
 import '../../features/donations/ui/screens/donation_receipt_screen.dart';
 import '../../features/donations/ui/screens/impact_screen.dart';
+import '../../features/home/ui/screens/about_association_screen.dart';
 import '../../features/home/ui/screens/home_screen.dart';
+import '../../features/home/ui/widgets/association_map_card.dart';
 import '../../features/notifications/ui/screens/notifications_screen.dart';
+import '../../features/transparency/logic/transparency_cubit.dart';
+import '../../features/transparency/ui/screens/transparency_screen.dart';
 import '../../features/profile/ui/screens/edit_profile_screen.dart';
-import '../../features/profile/ui/screens/my_activities_screen.dart';
 import '../../features/profile/ui/screens/my_donations_screen.dart';
+import '../../features/profile/ui/screens/my_sponsorships_screen.dart';
+import '../../features/profile/ui/screens/my_activities_screen.dart';
 import '../../features/profile/ui/screens/profile_screen.dart';
 import '../../features/requests/data/repositories/request_repository.dart';
 import '../../features/requests/logic/cubit/request_cubit.dart';
@@ -137,6 +142,10 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.onboarding}) {
             builder: (context, state) => const MyDonationsScreen(),
           ),
           GoRoute(
+            path: AppRoutes.mySponsorships,
+            builder: (context, state) => const MySponsorshipsScreen(),
+          ),
+          GoRoute(
             path: AppRoutes.myActivities,
             builder: (context, state) => const MyActivitiesScreen(),
           ),
@@ -161,6 +170,26 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.onboarding}) {
               final campaign = state.extra as CommunityCampaignModel;
               return FieldVolunteerScreen(campaign: campaign);
             },
+          ),
+          GoRoute(
+            path: AppRoutes.donorContactUs,
+            builder: (context, state) => const ContactUsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.donorAbout,
+            builder: (context, state) => const AboutAssociationScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.donorTransparency,
+            builder: (context, state) => BlocProvider(
+              create: (_) => TransparencyCubit()..load(),
+              child: const TransparencyScreen(),
+            ),
+          ),
+          GoRoute(
+            path: AppRoutes.associationMap,
+            builder: (context, state) =>
+                AssociationMapFullscreen.fromRouterExtra(state.extra),
           ),
         ],
       ),
@@ -211,9 +240,29 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.onboarding}) {
             builder: (context, state) => const HowToGetHelpScreen(),
           ),
           GoRoute(
+            path: AppRoutes.beneficiaryAbout,
+            builder: (context, state) => const AboutAssociationScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.beneficiaryTransparency,
+            builder: (context, state) => BlocProvider(
+              create: (_) => TransparencyCubit()..load(),
+              child: const TransparencyScreen(),
+            ),
+          ),
+          GoRoute(
+            path: AppRoutes.beneficiaryVolunteer,
+            builder: (context, state) => const VolunteerFormScreen(),
+          ),
+          GoRoute(
             path: AppRoutes.beneficiaryProfile,
             builder: (context, state) =>
                 const ProfileScreen(role: UserRole.beneficiary),
+          ),
+          GoRoute(
+            path: AppRoutes.beneficiaryAssociationMap,
+            builder: (context, state) =>
+                AssociationMapFullscreen.fromRouterExtra(state.extra),
           ),
           GoRoute(
             path: AppRoutes.editProfile,

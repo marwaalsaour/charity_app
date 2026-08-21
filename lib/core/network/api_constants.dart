@@ -4,6 +4,8 @@ class ApiConstants {
 
   static const String baseUrl = '$origin/api';
 
+  static const String updateFcmToken = '/updateFcmToken';
+
   /// Converts a Laravel public disk path to a full URL.
   static String? storageUrl(String? path) {
     if (path == null || path.trim().isEmpty) return null;

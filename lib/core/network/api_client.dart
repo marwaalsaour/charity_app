@@ -19,6 +19,10 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          if (_isPublicAuthPath(options.uri.path)) {
+            handler.next(options);
+            return;
+          }
           final token = await _tokenStorage.getToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -35,4 +39,8 @@ class ApiClient {
   late final Dio _dio;
 
   Dio get dio => _dio;
+
+  static bool _isPublicAuthPath(String path) {
+    return path.endsWith('/signin') || path.endsWith('/signup');
+  }
 }

@@ -1,16 +1,13 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:charity_app/core/constants/app_colors.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_theme/theme_cubit.dart';
-import '../../../../core/constants/app_theme/theme_state.dart';
+import '../../../../core/navigation/host_scaffold.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../../core/widgets/custom_button.dart';
 import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../donations/data/models/donation_checkout_args.dart';
 import '../../../donations/ui/utils/donation_flow_helper.dart';
@@ -21,6 +18,7 @@ import '../../data/models/search_suggestion.dart';
 import '../../logic/home_cubit.dart';
 import '../../logic/home_state.dart';
 
+import '../widgets/association_map_card.dart';
 import '../widgets/campaign_card.dart';
 import '../widgets/category_tabs.dart';
 import '../widgets/quick_donate_button.dart';
@@ -67,12 +65,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    context.locale;
 
     return Scaffold(
-      drawerScrimColor: Colors.black.withValues(alpha: 0.6),
       backgroundColor: cs.surface,
-      drawer: const AppDrawer(),
-
       body: BlocBuilder<HomeCubit, HomeState>(
         builder: (context, state) {
           if (state is HomeLoading) {
@@ -109,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBody(BuildContext context, HomeLoaded state) {
     final cs = Theme.of(context).colorScheme;
+    final locale = context.locale;
 
     return RefreshIndicator(
       color: cs.primary,
@@ -118,147 +115,179 @@ class _HomeScreenState extends State<HomeScreen> {
         slivers: [
           SliverToBoxAdapter(child: _buildHeader(context, state)),
 
-        SliverToBoxAdapter(
-          child: Container(
-            decoration: BoxDecoration(color: cs.surface),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(color: cs.surface),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AppSearchBar(
-                    hintText: 'search_hint'.tr(),
-                    campaigns: state.campaigns,
-                    onChanged: (query) =>
-                        context.read<HomeCubit>().filterBySearch(query),
-                    onSuggestionTap: (suggestion) =>
-                        _onSearchSuggestionTap(context, suggestion),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 📂 Categories
-                CategoryTabs(
-                  categoryKeys: context.read<HomeCubit>().categoriesKeys,
-                  selectedKey: state.selectedCategory,
-                  onSelect: context.read<HomeCubit>().filterByCategory,
-                ),
-
-                const SizedBox(height: 20),
-
-                Center(
-                  child: Image.asset(
-                    'assets/image/logo-green.png',
-                    height: 56,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ⚡ Quick donate
-                QuickDonateButton(
-                  onTap: () => openDonateAmountScreen(
-                    context,
-                    DonationCheckoutArgs(
-                      causeTitle: 'quick_donate'.tr(),
-                        targetType: DonationTargetType.association,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AppSearchBar(
+                      hintText: 'search_hint'.tr(),
+                      campaigns: state.campaigns,
+                      onChanged: (query) =>
+                          context.read<HomeCubit>().filterBySearch(query),
+                      onSuggestionTap: (suggestion) =>
+                          _onSearchSuggestionTap(context, suggestion),
                     ),
                   ),
-                  label: 'quick_donate'.tr(),
-                ),
 
-                const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                // 📌 Title row
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'recent_campaigns'.tr(),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                      Text(
-                        'view_all'.tr(),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: cs.primary,
-                        ),
-                      ),
-                    ],
+                  // 📂 Categories
+                  CategoryTabs(
+                    categoryKeys: context.read<HomeCubit>().categoriesKeys,
+                    selectedKey: state.selectedCategory,
+                    onSelect: context.read<HomeCubit>().filterByCategory,
                   ),
-                ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 20),
 
-                // 🏷 Campaigns
-                SizedBox(
-                  height: CampaignCard.cardHeight + 8,
-                  child: state.filteredCampaigns.isEmpty
-                      ? Center(
-                          child: Text(
-                            'no_campaigns'.tr(),
-                            style: TextStyle(
-                              color: cs.onSurface.withValues(alpha: 0.5),
-                            ),
+                  Center(
+                    child: Image.asset(
+                      'assets/image/logo-green.png',
+                      height: 56,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ⚡ Quick donate
+                  QuickDonateButton(
+                    onTap: () => openDonateAmountScreen(
+                      context,
+                      DonationCheckoutArgs(
+                        causeTitle: 'quick_donate'.tr(),
+                        targetType: DonationTargetType.association,
+                      ),
+                    ),
+                    label: 'quick_donate'.tr(),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // 📌 Title row
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'recent_campaigns'.tr(),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: cs.onSurface,
                           ),
-                        )
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: state.filteredCampaigns.length,
-                          itemBuilder: (context, i) {
-                            final campaign = state.filteredCampaigns[i];
-
-                            return CampaignCard(
-                              title: campaign.linkedDonation?.cardTitle ??
-                                  campaign.titleKey.tr(),
-                              category: campaign.categoryLabelKey.tr(),
-                              image: campaign.imageUrl,
-                              progress: campaign.progress,
-                              progressPercent: campaign.progressPercent,
-                              goal: campaign.formattedGoal,
-                              donation: campaign.linkedDonation,
-                              onTap: () =>
-                                  _openCampaignDetails(context, campaign),
-                              onDonateTap: () {
-                                final linked = campaign.linkedDonation;
-                                openDonateAmountScreen(
-                                  context,
-                                  DonationCheckoutArgs(
-                                    causeTitle: linked?.cardTitle ??
-                                        campaign.titleKey.tr(),
-                                    targetType: linked?.donateTargetType ??
-                                        DonationTargetType.association,
-                                    targetId: linked != null &&
-                                            linked.donateTargetType ==
-                                                DonationTargetType.request
-                                        ? linked.id
-                                        : null,
-                                  ),
-                                );
-                              },
-                            );
-                          },
                         ),
-                ),
+                        Text(
+                          'view_all'.tr(),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: cs.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                const SizedBox(height: 24),
-              ],
+                  const SizedBox(height: 12),
+
+                  // 🏷 Campaigns
+                  SizedBox(
+                    height: CampaignCard.cardHeight + 8,
+                    child: state.filteredCampaigns.isEmpty
+                        ? Center(
+                            child: Text(
+                              'no_campaigns'.tr(),
+                              style: TextStyle(
+                                color: cs.onSurface.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: state.filteredCampaigns.length,
+                            itemBuilder: (context, i) {
+                              final campaign = state.filteredCampaigns[i];
+
+                              return CampaignCard(
+                                title:
+                                    campaign.linkedDonation?.cardTitle ??
+                                    campaign.displayTitle,
+                                category: campaign.categoryLabelKey.tr(),
+                                image: campaign.imageUrl,
+                                progress: campaign.progress,
+                                progressPercent: campaign.progressPercent,
+                                goal: campaign.formattedGoal(context.locale),
+                                donation: campaign.linkedDonation,
+                                onTap: () =>
+                                    _openCampaignDetails(context, campaign),
+                                onDonateTap: campaign.isFullyFunded
+                                    ? null
+                                    : () {
+                                        final linked = campaign.linkedDonation;
+                                        final community =
+                                            campaign.linkedCommunity;
+                                        if (community != null) {
+                                          openDonateAmountScreen(
+                                            context,
+                                            donateArgsForCommunityCampaign(
+                                              community,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        openDonateAmountScreen(
+                                          context,
+                                          DonationCheckoutArgs(
+                                            causeTitle:
+                                                linked?.cardTitle ??
+                                                campaign.displayTitle,
+                                            targetType:
+                                                linked?.donateTargetType ??
+                                                DonationTargetType.association,
+                                            targetId:
+                                                linked != null && linked.id > 0
+                                                ? linked.id
+                                                : null,
+                                            caseCurrency: linked?.displayCurrency,
+                                          ),
+                                        );
+                                      },
+                                onSponsorTap: campaign.isFullyFunded
+                                    ? null
+                                    : () {
+                                        final linked = campaign.linkedDonation;
+                                        if (linked == null) return;
+                                        openDonateAmountScreen(
+                                          context,
+                                          linked.sponsorshipCheckoutArgs,
+                                        );
+                                      },
+                              );
+                            },
+                          ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  AssociationMapCard(
+                    key: ValueKey('assoc_map_${locale.languageCode}'),
+                  ),
+
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -337,11 +366,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                Builder(
-                  builder: (ctx) => IconButton(
-                    icon: const Icon(Icons.menu, color: Colors.white),
-                    onPressed: () => Scaffold.of(ctx).openDrawer(),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.white),
+                  onPressed: () => openHostDrawer(context),
                 ),
               ],
             ),
@@ -403,174 +430,5 @@ class _HomeProfileAvatar extends StatelessWidget {
     final file = File(path);
     if (file.existsSync()) return FileImage(file);
     return null;
-  }
-}
-
-class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Drawer(
-      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-      child: SafeArea(
-        child: Column(
-          children: [
-            // 🔷 Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-              color: AppColors.primary,
-              child: Text(
-                'app_name'.tr(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // 📂 Menu Items
-            _DrawerItem(
-              icon: Icons.verified_user_outlined,
-              title: 'transparency_file'.tr(),
-              onTap: () {},
-            ),
-
-            const Divider(height: 1),
-
-            _DrawerItem(
-              icon: Icons.info_outline,
-              title: 'about_association'.tr(),
-              onTap: () {},
-            ),
-
-            const Divider(height: 1),
-
-            _DrawerItem(
-              icon: Icons.contact_mail_outlined,
-              title: 'contact_us'.tr(),
-              onTap: () {},
-            ),
-
-            const Divider(height: 1),
-
-            const SizedBox(height: 8),
-
-            // 🌙 Theme Toggle
-            BlocBuilder<ThemeCubit, ThemeState>(
-              builder: (context, state) {
-                final isDarkMode = state.mode == ThemeMode.dark;
-
-                return SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  secondary: Icon(
-                    isDarkMode
-                        ? Icons.dark_mode_rounded
-                        : Icons.light_mode_rounded,
-                    color: cs.primary,
-                  ),
-                  title: Text(
-                    'dark_mode'.tr(),
-                    style: TextStyle(color: cs.onSurface),
-                  ),
-                  value: isDarkMode,
-                  activeThumbColor: AppColors.accent,
-                  onChanged: (_) => context.read<ThemeCubit>().toggle(),
-                );
-              },
-            ),
-
-            const Divider(height: 1),
-
-            // 🌐 Language Switch
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              leading: Icon(Icons.language, color: cs.primary),
-              title: Text(
-                'language'.tr(),
-                style: TextStyle(color: cs.onSurface),
-              ),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  context.locale.languageCode.toUpperCase(),
-                  style: TextStyle(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              onTap: () {
-                final current = context.locale.languageCode;
-                if (current == 'ar') {
-                  context.setLocale(const Locale('en'));
-                } else {
-                  context.setLocale(const Locale('ar'));
-                }
-              },
-            ),
-
-            const Spacer(),
-
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: CustomButton(
-                label: 'volunteer_with_us'.tr(),
-                icon: Icons.volunteer_activism,
-                onTap: () {
-                  Navigator.pop(context);
-                  context.push(AppRoutes.volunteerForm);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-
-  const _DrawerItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      leading: Icon(icon, color: cs.primary),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: cs.onSurface,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      onTap: onTap,
-    );
   }
 }

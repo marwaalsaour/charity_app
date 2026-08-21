@@ -118,7 +118,7 @@ class ProfileAvatarPicker extends StatelessWidget {
           width: size,
           height: size,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
+          errorBuilder: (_, _, _) =>
               Icon(Icons.person, size: size * 0.45, color: cs.primary),
         ),
       );

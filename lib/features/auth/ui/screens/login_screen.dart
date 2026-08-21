@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,10 +10,12 @@ import '../../../../core/auth/user_role_cubit.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../logic/login_cubit.dart';
 import '../../logic/login_state.dart';
+import '../../../notifications/logic/notifications_cubit.dart';
 import '../widgets/auth_method_toggle.dart';
 import '../widgets/auth_phone_field.dart';
 import '../widgets/auth_role_badge.dart';
@@ -124,6 +128,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                   .setRole(widget.role);
                               if (!context.mounted) return;
                               context.go(widget.role.homeRoute);
+                              unawaited(
+                                NotificationService.instance.init(
+                                  role: widget.role.name,
+                                ),
+                              );
+                              context.read<NotificationsCubit>().load(
+                                    role: widget.role,
+                                  );
                             } else if (state is LoginError) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text(state.message.tr())),
@@ -149,6 +161,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                             input: input,
                                             password:
                                                 _passwordController.text,
+                                            userCategory:
+                                                widget.role == UserRole.beneficiary
+                                                    ? 'beneficiary'
+                                                    : 'public',
                                           );
                                     },
                             );

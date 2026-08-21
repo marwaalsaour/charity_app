@@ -47,6 +47,18 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     await _repository.markAllAsRead(_audience!);
   }
 
+  Future<void> refreshFromServer() async {
+    if (_audience == null) return;
+    await _repository.syncFromServer(_audience!);
+  }
+
+  void resetSession() {
+    _subscription?.cancel();
+    _subscription = null;
+    _audience = null;
+    emit(NotificationsInitial());
+  }
+
   @override
   Future<void> close() {
     _subscription?.cancel();

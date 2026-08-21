@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../data/models/volunteer_activity_model.dart';
 import '../../data/repositories/volunteer_activity_repository.dart';
 
@@ -44,9 +45,7 @@ class _MyActivitiesScreenState extends State<MyActivitiesScreen> {
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('my_activities'.tr()),
-      ),
+      appBar: AtaaAppBar(title: 'my_activities'.tr()),
       body: FutureBuilder<
           ({int totalHours, List<CampaignVolunteerSummary> campaigns})>(
         future: _dataFuture,
@@ -218,7 +217,7 @@ class _CampaignActivityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  campaign.titleKey.tr(),
+                  campaign.displayTitle,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
@@ -226,10 +225,24 @@ class _CampaignActivityCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  campaign.locationKey.tr(),
-                  style: TextStyle(fontSize: 12, color: ext.textSecondary),
-                ),
+                if (campaign.status.isNotEmpty)
+                  Text(
+                    campaign.statusLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: campaign.status.toLowerCase() == 'pending'
+                          ? Colors.orange.shade700
+                          : campaign.status.toLowerCase() == 'approved'
+                              ? Colors.green.shade700
+                              : ext.textSecondary,
+                    ),
+                  )
+                else
+                  Text(
+                    campaign.displayLocation,
+                    style: TextStyle(fontSize: 12, color: ext.textSecondary),
+                  ),
                 const SizedBox(height: 2),
                 Text(
                   date,

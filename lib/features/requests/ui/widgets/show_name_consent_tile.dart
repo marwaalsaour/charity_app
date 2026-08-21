@@ -29,17 +29,6 @@ class ShowNameConsentTile extends StatelessWidget {
           height: 1.35,
         ),
       ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(
-          'show_beneficiary_name_hint'.tr(),
-          style: TextStyle(
-            fontSize: 12,
-            color: cs.onSurface.withValues(alpha: 0.6),
-            height: 1.35,
-          ),
-        ),
-      ),
     );
   }
 }

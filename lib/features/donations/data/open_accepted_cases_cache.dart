@@ -25,7 +25,7 @@ class OpenAcceptedCasesCache {
       if (id == null) continue;
       final key = id.toString();
       final prev = byId[key] ?? <String, dynamic>{};
-      byId[key] = {...prev, ...item};
+      byId[key] = _mergePreservingNameConsent(prev, item);
     }
 
     final next = byId.values.toList()
@@ -36,6 +36,50 @@ class OpenAcceptedCasesCache {
       });
 
     await prefs.setString(_key, jsonEncode(next));
+  }
+
+  static Map<String, dynamic> _mergePreservingNameConsent(
+    Map<String, dynamic> prev,
+    Map<String, dynamic> incoming,
+  ) {
+    final merged = {...prev, ...incoming};
+    final prevConsent = _isTruthy(prev['show_beneficiary_name']) ||
+        _isTruthy(prev['showBeneficiaryName']);
+    final incomingConsent = _isTruthy(incoming['show_beneficiary_name']) ||
+        _isTruthy(incoming['showBeneficiaryName']);
+    final showName = prevConsent || incomingConsent;
+    if (showName) {
+      merged['show_beneficiary_name'] = true;
+      merged['showBeneficiaryName'] = true;
+      merged['beneficiary_public_name'] =
+          incoming['beneficiary_public_name'] ??
+          incoming['beneficiary_name'] ??
+          incoming['full_name'] ??
+          prev['beneficiary_public_name'] ??
+          prev['beneficiary_name'] ??
+          prev['full_name'];
+      merged['beneficiary_name'] =
+          incoming['beneficiary_name'] ?? prev['beneficiary_name'];
+      merged['beneficiaryName'] =
+          incoming['beneficiaryName'] ?? prev['beneficiaryName'];
+      merged['full_name'] = incoming['full_name'] ?? prev['full_name'];
+    } else {
+      merged['full_name'] = incoming['full_name'] ?? prev['full_name'];
+      merged['beneficiary_public_name'] =
+          incoming['beneficiary_public_name'] ??
+          prev['beneficiary_public_name'];
+    }
+    return merged;
+  }
+
+  static bool _isTruthy(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final v = value.trim().toLowerCase();
+      return v == '1' || v == 'true' || v == 'yes';
+    }
+    return false;
   }
 
   static Future<List<Map<String, dynamic>>> loadCases() async {

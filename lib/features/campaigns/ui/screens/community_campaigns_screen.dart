@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../donations/data/models/donation_checkout_args.dart';
 import '../../../donations/ui/utils/donation_flow_helper.dart';
 import '../../data/models/community_campaign_model.dart';
@@ -13,14 +14,27 @@ import '../widgets/community_campaign_card.dart';
 class CommunityCampaignsScreen extends StatelessWidget {
   const CommunityCampaignsScreen({super.key});
 
+  DonationCheckoutArgs _donateArgs(CommunityCampaignModel campaign) {
+    final id = campaign.apiId;
+    if (id > 0) {
+      return DonationCheckoutArgs(
+        causeTitle: campaign.displayTitle,
+        targetType: DonationTargetType.campaign,
+        targetId: id,
+      );
+    }
+    return DonationCheckoutArgs(
+      causeTitle: campaign.displayTitle,
+      targetType: DonationTargetType.association,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('community_campaigns.screen_title'.tr()),
-      ),
+      appBar: AtaaAppBar(title: 'community_campaigns.screen_title'.tr()),
       body: FutureBuilder<List<CommunityCampaignModel>>(
         future: CommunityCampaignRepository().getCampaigns(),
         builder: (context, snapshot) {
@@ -29,6 +43,9 @@ class CommunityCampaignsScreen extends StatelessWidget {
           }
 
           final campaigns = snapshot.data ?? [];
+          if (campaigns.isEmpty) {
+            return Center(child: Text('no_campaigns'.tr()));
+          }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -46,8 +63,8 @@ class CommunityCampaignsScreen extends StatelessWidget {
               Text(
                 'community_campaigns.active_title'.tr(),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                      fontWeight: FontWeight.w800,
+                    ),
               ),
               const SizedBox(height: 20),
               ...campaigns.map(
@@ -63,10 +80,7 @@ class CommunityCampaignsScreen extends StatelessWidget {
                   ),
                   onDonate: () => openDonateAmountScreen(
                     context,
-                    DonationCheckoutArgs(
-                      causeTitle: campaign.titleKey.tr(),
-                      targetType: DonationTargetType.association,
-                    ),
+                    _donateArgs(campaign),
                   ),
                 ),
               ),

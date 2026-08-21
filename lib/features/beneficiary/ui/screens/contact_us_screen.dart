@@ -1,12 +1,15 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/constants/association_contact.dart';
 import '../../../../core/utils/external_launch_helper.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 
 class ContactUsScreen extends StatelessWidget {
   const ContactUsScreen({super.key});
@@ -20,9 +23,11 @@ class ContactUsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor:
           isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: AppBar(
-        title: Text('contact_us'.tr()),
-        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      appBar: AtaaAppBar(
+        title: 'contact_us'.tr(),
+        onBack: () => context.go(
+          AppRoutes.homeForPath(GoRouterState.of(context).uri.path),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),

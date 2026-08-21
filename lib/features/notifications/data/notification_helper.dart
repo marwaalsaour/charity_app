@@ -23,6 +23,8 @@ class NotificationHelper {
       data: {
         'type': notification.type.firestoreValue,
         'role': notification.audience.storageId,
+        if (notification.type == AppNotificationType.caseFullyFunded)
+          'route': '/beneficiary/home',
       },
     );
   }
@@ -109,6 +111,49 @@ class NotificationHelper {
           ? 'notification_beneficiary_approved_body'
           : 'notification_beneficiary_rejected_body',
       bodyArgs: {'title': requestTitle},
+      createdAt: DateTime.now(),
+    );
+    await _repository.addNotification(notification);
+    await _pushToDevice(notification: notification);
+  }
+
+  static Future<void> notifyCaseFullyFunded({
+    required String requestTitle,
+    double? amount,
+    String? currency,
+  }) async {
+    final audience = NotificationAudience.beneficiary;
+    final notification = AppNotificationModel(
+      id: '',
+      userId: audience.storageId,
+      audience: audience,
+      type: AppNotificationType.caseFullyFunded,
+      titleKey: 'notification_case_funded_title',
+      bodyKey: 'notification_case_funded_body',
+      bodyArgs: {
+        'title': requestTitle,
+        'amount': ?amount?.toStringAsFixed(0),
+        'currency': ?currency,
+      },
+      createdAt: DateTime.now(),
+    );
+    await _repository.addNotification(notification);
+    await _pushToDevice(notification: notification);
+  }
+
+  static Future<void> notifySponsorshipWalletEmpty({
+    required String childName,
+    required String sponsorshipId,
+  }) async {
+    final audience = NotificationAudience.donor;
+    final notification = AppNotificationModel(
+      id: '',
+      userId: audience.storageId,
+      audience: audience,
+      type: AppNotificationType.general,
+      titleKey: 'notification_sponsorship_empty_title',
+      bodyKey: 'notification_sponsorship_empty_body',
+      bodyArgs: {'name': childName, 'id': sponsorshipId},
       createdAt: DateTime.now(),
     );
     await _repository.addNotification(notification);

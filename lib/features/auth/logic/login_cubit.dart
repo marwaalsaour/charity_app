@@ -12,6 +12,7 @@ class LoginCubit extends Cubit<LoginState> {
   Future<void> login({
     required String input,
     required String password,
+    String? userCategory,
   }) async {
     emit(const LoginLoading());
 
@@ -19,6 +20,7 @@ class LoginCubit extends Cubit<LoginState> {
       await _repository.login(
         input: input,
         password: password,
+        userCategory: userCategory,
       );
       emit(const LoginSuccess());
     } on ApiException catch (e) {

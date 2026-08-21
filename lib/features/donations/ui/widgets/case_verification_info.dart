@@ -23,23 +23,13 @@ class CaseVerificationInfo extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final rows = <Widget>[];
 
-    if (donation.showBeneficiaryName &&
-        donation.beneficiaryName != null &&
+    if (donation.beneficiaryName != null &&
         donation.beneficiaryName!.trim().isNotEmpty) {
       rows.add(
         _InfoRow(
           icon: Icons.person_outline,
           label: 'case_beneficiary_name'.tr(),
           value: donation.beneficiaryName!.trim(),
-          compact: compact,
-        ),
-      );
-    } else if (!compact) {
-      rows.add(
-        _InfoRow(
-          icon: Icons.privacy_tip_outlined,
-          label: 'case_beneficiary_name'.tr(),
-          value: 'case_name_hidden'.tr(),
           compact: compact,
         ),
       );

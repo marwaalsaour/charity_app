@@ -14,9 +14,38 @@ class DonationCheckoutArgs {
   final DonationTargetType targetType;
   final int? targetId;
 
+  /// Currency the case was requested in. Donations in other currencies
+  /// are converted to this when checking whether the goal is complete.
+  final String? caseCurrency;
+
+  /// Recurring monthly orphan sponsorship instead of a one-time gift.
+  final bool isOrphanSponsorship;
+  final int sponsorshipMonths;
+
   const DonationCheckoutArgs({
     required this.causeTitle,
     this.targetType = DonationTargetType.association,
     this.targetId,
+    this.caseCurrency,
+    this.isOrphanSponsorship = false,
+    this.sponsorshipMonths = 12,
   });
+
+  DonationCheckoutArgs copyWith({
+    String? causeTitle,
+    DonationTargetType? targetType,
+    int? targetId,
+    String? caseCurrency,
+    bool? isOrphanSponsorship,
+    int? sponsorshipMonths,
+  }) {
+    return DonationCheckoutArgs(
+      causeTitle: causeTitle ?? this.causeTitle,
+      targetType: targetType ?? this.targetType,
+      targetId: targetId ?? this.targetId,
+      caseCurrency: caseCurrency ?? this.caseCurrency,
+      isOrphanSponsorship: isOrphanSponsorship ?? this.isOrphanSponsorship,
+      sponsorshipMonths: sponsorshipMonths ?? this.sponsorshipMonths,
+    );
+  }
 }

@@ -47,7 +47,7 @@ class HomeLoaded extends HomeState {
   }
 
   bool _matchesSearch(CampaignModel campaign, String query) {
-    final title = campaign.titleKey.tr().toLowerCase();
+    final title = campaign.displayTitle.toLowerCase();
     final category = campaign.categoryLabelKey.tr().toLowerCase();
 
     if (title.contains(query) || category.contains(query)) return true;

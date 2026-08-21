@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/network/api_exception.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../auth/data/repositories/auth_repository.dart';
@@ -115,26 +116,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('edit_profile'.tr()),
+      appBar: AtaaAppBar(
+        title: 'edit_profile'.tr(),
         actions: [
           TextButton(
             onPressed: _saving || _loading ? null : _save,
+            style: TextButton.styleFrom(
+              foregroundColor: AtaaAppBar.actionForeground,
+            ),
             child: _saving
-                ? SizedBox(
+                ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: AtaaAppBar.actionForeground,
                     ),
                   )
                 : Text(
                     'save_changes'.tr(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
           ),
         ],

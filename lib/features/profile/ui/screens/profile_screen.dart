@@ -16,7 +16,11 @@ import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../requests/logic/cubit/request_cubit.dart';
 import '../../../requests/logic/states/request_state.dart';
 import '../../data/models/user_profile_model.dart';
+import '../../data/models/wallet_currencies.dart';
+import '../../data/repositories/beneficiary_wallet_store.dart';
 import '../../data/repositories/user_profile_repository.dart';
+import '../widgets/wallet_card.dart';
+import 'my_sponsorships_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.role = UserRole.donor});
@@ -30,8 +34,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _profileRepository = UserProfileRepository();
 
-  double _walletBalance = 0;
-  String _walletCurrency = 'USD';
+  Map<String, double> _walletBalances = WalletCurrencies.empty;
   bool _loadingWallet = true;
   UserProfileModel? _profile;
   bool _loadingProfile = true;
@@ -45,11 +48,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _applyWalletFrom(UserProfileModel? profile) {
-    if (_isBeneficiary) return;
-    final wallet = profile?.primaryWallet ?? (amount: 0.0, currency: 'USD');
-    _walletBalance = wallet.amount;
-    _walletCurrency = wallet.currency;
+    _walletBalances = profile?.walletBalances ?? WalletCurrencies.empty;
     _loadingWallet = false;
+  }
+
+  Future<void> _mergeBeneficiaryCredits() async {
+    if (!_isBeneficiary) return;
+    final credits = await BeneficiaryWalletStore().loadBalances();
+    if (!mounted || credits.isEmpty) return;
+    setState(() {
+      _walletBalances = WalletCurrencies.merge([_walletBalances, credits]);
+    });
   }
 
   Future<void> _loadWallet() async {
@@ -60,6 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (remote != null) _profile = remote;
       _applyWalletFrom(profile);
     });
+    await _mergeBeneficiaryCredits();
   }
 
   Future<void> _loadProfile() async {
@@ -70,6 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _loadingProfile = false;
       _applyWalletFrom(local);
     });
+    await _mergeBeneficiaryCredits();
 
     final remote = await AuthRepository().syncProfile();
     if (!mounted || remote == null) return;
@@ -77,6 +88,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _profile = remote;
       _applyWalletFrom(remote);
     });
+    await _mergeBeneficiaryCredits();
   }
 
   Future<void> _openEditProfile() async {
@@ -114,7 +126,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         foregroundColor: cs.onSurface,
         elevation: 0,
       ),
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: _loadProfile,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           const SizedBox(height: 8),
@@ -129,20 +143,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onEditTap: _openEditProfile,
           ),
           const SizedBox(height: 24),
-          if (_isBeneficiary)
+          WalletCard(
+            balances: _walletBalances,
+            isLoading: _loadingWallet,
+          ),
+          if (_isBeneficiary) ...[
+            const SizedBox(height: 16),
             BlocBuilder<RequestCubit, RequestState>(
               builder: (context, state) => _BeneficiaryRequestsCard(
                 count: state.myRequests
                     .where((r) => r.isPending || r.isApproved)
                     .length,
               ),
-            )
-          else
-            _WalletCard(
-              balance: _walletBalance,
-              currency: _walletCurrency,
-              isLoading: _loadingWallet,
             ),
+          ],
           const SizedBox(height: 24),
           if (_isBeneficiary) ...[
             _ProfileMenuTile(
@@ -170,6 +184,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () async {
                 await context.push(AppRoutes.myDonations);
                 _loadWallet();
+              },
+            ),
+            const SizedBox(height: 10),
+            _ProfileMenuTile(
+              icon: Icons.child_care_outlined,
+              iconColor: cs.primary,
+              iconBg: cs.primary.withValues(alpha: 0.1),
+              title: context.tr('my_sponsorships'),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const MySponsorshipsScreen(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 10),
@@ -212,6 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -334,8 +363,7 @@ class _AvatarSection extends StatelessWidget {
       return Icon(Icons.person, size: 48, color: cs.primary);
     }
 
-    final isNetwork =
-        path.startsWith('http://') || path.startsWith('https://');
+    final isNetwork = path.startsWith('http://') || path.startsWith('https://');
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -345,25 +373,14 @@ class _AvatarSection extends StatelessWidget {
               width: 100,
               height: 100,
               fit: BoxFit.cover,
-              placeholder: (_, __) => Icon(
-                Icons.person,
-                size: 48,
-                color: cs.primary,
-              ),
-              errorWidget: (_, __, ___) => Icon(
-                Icons.person,
-                size: 48,
-                color: cs.primary,
-              ),
+              placeholder: (_, _) =>
+                  Icon(Icons.person, size: 48, color: cs.primary),
+              errorWidget: (_, _, _) =>
+                  Icon(Icons.person, size: 48, color: cs.primary),
             )
           : File(path).existsSync()
-              ? Image.file(
-                  File(path),
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.cover,
-                )
-              : Icon(Icons.person, size: 48, color: cs.primary),
+          ? Image.file(File(path), width: 100, height: 100, fit: BoxFit.cover)
+          : Icon(Icons.person, size: 48, color: cs.primary),
     );
   }
 }
@@ -443,106 +460,6 @@ class _BeneficiaryRequestsCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _WalletCard extends StatelessWidget {
-  const _WalletCard({
-    required this.balance,
-    required this.currency,
-    required this.isLoading,
-  });
-
-  final double balance;
-  final String currency;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final cs = theme.colorScheme;
-    final ext = theme.extension<AppThemeExtension>()!;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: ext.cardBackground,
-        borderRadius: BorderRadius.circular(AppRadius.large),
-        border: Border.all(color: ext.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.accent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'wallet'.tr().toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: ext.textSecondary,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                if (isLoading)
-                  SizedBox(
-                    height: 28,
-                    width: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: cs.primary,
-                    ),
-                  )
-                else
-                  Text(
-                    _formatBalance(balance, currency),
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: cs.onSurface,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Icon(
-            Icons.account_balance_wallet_outlined,
-            color: cs.primary.withValues(alpha: 0.7),
-            size: 32,
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatBalance(double amount, String currency) {
-    final symbol = switch (currency) {
-      'USD' => '\$',
-      'EUR' => '€',
-      'SYP' => 'ل.س ',
-      _ => '$currency ',
-    };
-    return '$symbol${amount.toStringAsFixed(0)}';
   }
 }
 

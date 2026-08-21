@@ -7,6 +7,7 @@ import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
 import '../../../../core/utils/share_link_helper.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../donations/data/models/donation_checkout_args.dart';
 import '../../../donations/ui/utils/donation_flow_helper.dart';
@@ -25,14 +26,8 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
     final ext = theme.extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
-        elevation: 0,
-        title: Text(
-          'community_campaigns.detail_title'.tr(),
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-        ),
+      appBar: AtaaAppBar(
+        title: 'community_campaigns.detail_title'.tr(),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined),
@@ -70,7 +65,7 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          campaign.categoryKey.tr().toUpperCase(),
+                          campaign.displayCategory.toUpperCase(),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -80,7 +75,7 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          campaign.titleKey.tr(),
+                          campaign.displayTitle,
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w800,
@@ -102,7 +97,7 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                               child: _InfoTile(
                                 icon: Icons.location_on_outlined,
                                 label: 'location'.tr(),
-                                value: campaign.locationKey.tr(),
+                                value: campaign.displayLocation,
                               ),
                             ),
                           ],
@@ -118,7 +113,7 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          campaign.storyKey.tr(),
+                          campaign.displayStory,
                           style: TextStyle(
                             fontSize: 14,
                             color: ext.textSecondary,
@@ -157,8 +152,11 @@ class CommunityCampaignDetailsScreen extends StatelessWidget {
                       onTap: () => openDonateAmountScreen(
                         context,
                         DonationCheckoutArgs(
-                          causeTitle: campaign.titleKey.tr(),
-                          targetType: DonationTargetType.association,
+                          causeTitle: campaign.displayTitle,
+                          targetType: campaign.apiId > 0
+                              ? DonationTargetType.campaign
+                              : DonationTargetType.association,
+                          targetId: campaign.apiId > 0 ? campaign.apiId : null,
                         ),
                       ),
                     ),

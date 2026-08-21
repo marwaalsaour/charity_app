@@ -21,7 +21,7 @@ class ShareLinkHelper {
     return copyLink(
       context,
       caseLink(donation.id),
-      title: donation.displayName,
+        title: donation.cardTitle,
     );
   }
 
@@ -32,7 +32,7 @@ class ShareLinkHelper {
     return copyLink(
       context,
       campaignLink(campaign.id),
-      title: campaign.titleKey.tr(),
+      title: campaign.displayTitle,
     );
   }
 

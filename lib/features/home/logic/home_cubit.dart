@@ -91,4 +91,9 @@ class HomeCubit extends Cubit<HomeState> {
   }
 
   Future<void> refresh() => loadHome(force: true);
+
+  void resetSession() {
+    _loading = false;
+    emit(HomeInitial());
+  }
 }
