@@ -1,8 +1,7 @@
 # عطاء | ATAA
 
-تطبيق Flutter لجمعية خيرية سورية. يدعم ثلاث أدوار: **متبرع**، **مستفيد**، و**متطوع**، مع العربية والإنجليزية والوضع الليلي.
-
-A Flutter charity app for donors, beneficiaries, and volunteers. Arabic and English, with light and dark themes.
+تطبيق Flutter لجمعية خيرية سورية. يدعم ثلاث أدوار: **متبرع/متطوع**، **مستفيد**،
+A Flutter charity app for donors/volunteer, beneficiaries
 
 ---
 
@@ -22,9 +21,9 @@ flutter pub get
 flutter run
 ```
 
-استخدم فرع `main` دائماً. لا تنسخ مجلدات البناء المحلية من جهاز آخر.
+استخدم فرع `main` دائماً.
 
-Always use the `main` branch. Do not copy local Gradle/build folders from another machine.
+Always use the `main` branch.
 
 ### أوامر مفيدة | Useful commands
 
@@ -60,20 +59,11 @@ flutter run
 
 The Android Firebase config is already in the repo. After cloning you do not need to copy it by hand.
 
-## ما لا يُرفع إلى GitHub | Not committed
-
-هذه الملفات محلية وتُولَّد على كل جهاز، فلا ترفعها حتى لا يحدث تضارب:
-
-- `android/build/` مخرجات Gradle
-- `android/certs/` شهادات محلية
-- `android/gradle_build_log.txt`
-- `.gradle/` و `build/`
-- `.vscode/settings.json` إعدادات المحرر المحلية
-
-Flutter يولّد ملفات Gradle الناقصة تلقائياً عند `flutter run`.
-
 ## ملاحظات للزملاء | For teammates
 
-1. استنسخ المستودع من جديد أو حدّث فرع `main`: `git pull origin main`
-2. لا تدمج مجلد `android/build` من جهاز آخر
-3. إذا ظهر تضارب، أبقِ نسخة GitHub لملفات المشروع واحذف مجلدات البناء ثم نفّذ `flutter clean` ثم `flutter pub get`
+استنسخ المستودع من جديد أو حدّث فرع `main`:
+
+```bash
+git pull origin main
+flutter pub get
+```

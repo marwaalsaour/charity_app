@@ -7,7 +7,6 @@ gradle-wrapper.jar
 GeneratedPluginRegistrant.java
 .cxx/
 
-# Local Gradle outputs (do not commit)
 /build/
 /certs/
 gradle_build_log.txt
