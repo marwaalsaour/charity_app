@@ -19,13 +19,16 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          if (_isPublicAuthPath(options.uri.path)) {
+          if (_isPublicAuthPath(options.path)) {
             handler.next(options);
             return;
           }
           final token = await _tokenStorage.getToken();
           if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
+            final value = token.startsWith('Bearer ')
+                ? token
+                : 'Bearer $token';
+            options.headers['Authorization'] = value;
           }
           handler.next(options);
         },

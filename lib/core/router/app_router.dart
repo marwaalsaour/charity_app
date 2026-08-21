@@ -25,6 +25,7 @@ import '../../features/donations/ui/screens/donation_list_screen.dart';
 import '../../features/donations/ui/screens/donation_receipt_screen.dart';
 import '../../features/donations/ui/screens/impact_screen.dart';
 import '../../features/home/ui/screens/about_association_screen.dart';
+import '../../features/home/ui/screens/all_campaigns_screen.dart';
 import '../../features/home/ui/screens/home_screen.dart';
 import '../../features/home/ui/widgets/association_map_card.dart';
 import '../../features/notifications/ui/screens/notifications_screen.dart';
@@ -190,6 +191,10 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.onboarding}) {
             path: AppRoutes.associationMap,
             builder: (context, state) =>
                 AssociationMapFullscreen.fromRouterExtra(state.extra),
+          ),
+          GoRoute(
+            path: AppRoutes.donorAllCampaigns,
+            builder: (context, state) => const AllCampaignsScreen(),
           ),
         ],
       ),

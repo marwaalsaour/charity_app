@@ -1,10 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/api_client.dart';
-import '../../../donations/data/repositories/donation_receipt_repository.dart';
+import '../../../volunteer/data/repositories/volunteer_api_repository.dart';
 
 class HomeStats {
   const HomeStats({
@@ -23,56 +21,39 @@ class HomeStats {
 class HomeStatsRepository {
   HomeStatsRepository({
     Dio? dio,
-    DonationReceiptRepository? receiptRepository,
+    VolunteerApiRepository? volunteerRepository,
   })  : _dio = dio ?? ApiClient.instance.dio,
-        _receiptRepository =
-            receiptRepository ?? DonationReceiptRepository();
+        _volunteerRepository =
+            volunteerRepository ?? VolunteerApiRepository(dio: dio);
 
   final Dio _dio;
-  final DonationReceiptRepository _receiptRepository;
+  final VolunteerApiRepository _volunteerRepository;
 
-  static const _donorsCountKey = 'home_real_donors_count_v1';
+  static const _cacheKey = 'home_stats_api_v5';
 
   Future<HomeStats> fetchStats() async {
-    // GitHub backend has /dashboard/kpis (no /homestats).
     final fromKpis = await _tryDashboardKpis();
-    final fromHome = fromKpis == null ? await _tryHomeStats() : null;
-    final fromApi = fromKpis ?? fromHome;
-    final localDonors = await _readLocalDonorsCount();
-    final receiptCount = (await _receiptRepository.getReceipts()).length;
+    final volunteers =
+        await _volunteerRepository.fetchTotalApprovedVolunteerCount();
+    final cached = await _readCache();
 
-    final apiDonors = fromApi?.donors ?? 0;
-    final donors = math.max(
-      apiDonors,
-      math.max(localDonors, receiptCount),
+    final stats = HomeStats(
+      donors: fromKpis?.donors ?? cached?.donors ?? 0,
+      volunteers: volunteers ?? fromKpis?.volunteers ?? cached?.volunteers ?? 0,
+      beneficiaries:
+          fromKpis?.beneficiaries ?? cached?.beneficiaries ?? 0,
     );
 
-    if (donors > localDonors) {
-      await _writeLocalDonorsCount(donors);
+    if (fromKpis != null || volunteers != null) {
+      await _writeCache(stats);
     }
-
-    return HomeStats(
-      donors: donors,
-      volunteers: fromApi?.volunteers ?? 0,
-      beneficiaries: fromApi?.beneficiaries ?? 0,
-    );
+    return stats;
   }
 
-  /// Call after every successful donation so the home counter increases by 1.
+  /// Kept for callers after a donation; counters come from the API.
   Future<int> recordDonationSuccess() async {
-    final local = await _readLocalDonorsCount();
-    final next = local + 1;
-    await _writeLocalDonorsCount(next);
-    return next;
-  }
-
-  Future<HomeStats?> _tryHomeStats() async {
-    try {
-      final response = await _dio.get('/homestats');
-      return _parse(response.data);
-    } catch (_) {
-      return null;
-    }
+    final stats = await fetchStats();
+    return stats.donors;
   }
 
   Future<HomeStats?> _tryDashboardKpis() async {
@@ -84,64 +65,52 @@ class HomeStatsRepository {
           ? Map<String, dynamic>.from(data['data'] as Map)
           : Map<String, dynamic>.from(data);
 
-      // Each donation transaction counts as +1 donor contribution.
-      final donors = _toInt(payload['total_donors']) ??
-          _toInt(payload['total_approved_donations']) ??
-          _toInt(payload['donors']) ??
-          0;
-      final volunteers = _toInt(payload['total_volunteers']) ??
-          _toInt(payload['volunteers']) ??
-          0;
-      final beneficiaries = _toInt(payload['total_beneficiaries']) ??
-          _toInt(payload['beneficiaries']) ??
-          _toInt(payload['accepted_requests']) ??
-          0;
-
       return HomeStats(
-        donors: donors,
-        volunteers: volunteers,
-        beneficiaries: beneficiaries,
+        donors: _toInt(payload['total_approved_donations']) ??
+            _toInt(payload['total_donors']) ??
+            _toInt(payload['donors']) ??
+            0,
+        volunteers: _toInt(payload['total_volunteers']) ??
+            _toInt(payload['volunteers']) ??
+            0,
+        beneficiaries: _toInt(payload['accepted_requests']) ??
+            _toInt(payload['total_beneficiaries']) ??
+            _toInt(payload['beneficiaries']) ??
+            0,
       );
     } catch (_) {
       return null;
     }
   }
 
-  HomeStats? _parse(dynamic data) {
-    if (data is! Map) return null;
-    final payload = data['data'] is Map
-        ? Map<String, dynamic>.from(data['data'] as Map)
-        : Map<String, dynamic>.from(data);
-
-    return HomeStats(
-      donors: _toInt(payload['donors']) ??
-          _toInt(payload['total_donors']) ??
-          _toInt(payload['total_approved_donations']) ??
-          0,
-      volunteers: _toInt(payload['volunteers']) ??
-          _toInt(payload['total_volunteers']) ??
-          0,
-      beneficiaries: _toInt(payload['beneficiaries']) ??
-          _toInt(payload['total_beneficiaries']) ??
-          _toInt(payload['accepted_requests']) ??
-          0,
-    );
+  Future<HomeStats?> _readCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final donors = prefs.getInt('${_cacheKey}_donors');
+      if (donors == null) return null;
+      return HomeStats(
+        donors: donors,
+        volunteers: prefs.getInt('${_cacheKey}_volunteers') ?? 0,
+        beneficiaries: prefs.getInt('${_cacheKey}_beneficiaries') ?? 0,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<int> _readLocalDonorsCount() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_donorsCountKey) ?? 0;
-  }
-
-  Future<void> _writeLocalDonorsCount(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_donorsCountKey, value < 0 ? 0 : value);
+  Future<void> _writeCache(HomeStats stats) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('${_cacheKey}_donors', stats.donors);
+      await prefs.setInt('${_cacheKey}_volunteers', stats.volunteers);
+      await prefs.setInt('${_cacheKey}_beneficiaries', stats.beneficiaries);
+    } catch (_) {}
   }
 
   int? _toInt(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
+    if (value is String) return int.tryParse(value.replaceAll(',', ''));
     return null;
   }
 }

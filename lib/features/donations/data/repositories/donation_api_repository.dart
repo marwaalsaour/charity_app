@@ -24,7 +24,11 @@ class DonationApiRepository {
         response = await _dio.post(
           '/quickDonate',
           data: {'amount': amount, 'currency': currency},
-          options: Options(contentType: Headers.jsonContentType),
+          options: Options(
+            contentType: Headers.jsonContentType,
+            sendTimeout: const Duration(seconds: 30),
+            receiveTimeout: const Duration(seconds: 30),
+          ),
         );
       } else {
         final type = args.targetType == DonationTargetType.campaign
@@ -33,7 +37,11 @@ class DonationApiRepository {
         response = await _dio.post(
           '/donate/$type/${args.targetId}',
           data: {'amount': amount, 'currency': currency},
-          options: Options(contentType: Headers.jsonContentType),
+          options: Options(
+            contentType: Headers.jsonContentType,
+            sendTimeout: const Duration(seconds: 30),
+            receiveTimeout: const Duration(seconds: 30),
+          ),
         );
       }
 

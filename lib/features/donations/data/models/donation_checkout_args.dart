@@ -20,7 +20,12 @@ class DonationCheckoutArgs {
 
   /// Recurring monthly orphan sponsorship instead of a one-time gift.
   final bool isOrphanSponsorship;
-  final int sponsorshipMonths;
+
+  /// Laravel orphan row id for POST /orphanssponsor/{orphan_id}.
+  final int? orphanId;
+
+  /// Chosen sponsorship duration in months.
+  final int? totalMonths;
 
   const DonationCheckoutArgs({
     required this.causeTitle,
@@ -28,7 +33,8 @@ class DonationCheckoutArgs {
     this.targetId,
     this.caseCurrency,
     this.isOrphanSponsorship = false,
-    this.sponsorshipMonths = 12,
+    this.orphanId,
+    this.totalMonths,
   });
 
   DonationCheckoutArgs copyWith({
@@ -37,7 +43,8 @@ class DonationCheckoutArgs {
     int? targetId,
     String? caseCurrency,
     bool? isOrphanSponsorship,
-    int? sponsorshipMonths,
+    int? orphanId,
+    int? totalMonths,
   }) {
     return DonationCheckoutArgs(
       causeTitle: causeTitle ?? this.causeTitle,
@@ -45,7 +52,8 @@ class DonationCheckoutArgs {
       targetId: targetId ?? this.targetId,
       caseCurrency: caseCurrency ?? this.caseCurrency,
       isOrphanSponsorship: isOrphanSponsorship ?? this.isOrphanSponsorship,
-      sponsorshipMonths: sponsorshipMonths ?? this.sponsorshipMonths,
+      orphanId: orphanId ?? this.orphanId,
+      totalMonths: totalMonths ?? this.totalMonths,
     );
   }
 }

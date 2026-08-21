@@ -37,6 +37,9 @@ class MainActivity : FlutterActivity() {
 
     private fun shareFile(path: String, filename: String?, mimeType: String) {
         val file = File(path)
+        if (!file.exists() || file.length() == 0L) {
+            throw IllegalStateException("Certificate file is missing")
+        }
         val uri = FileProvider.getUriForFile(
             this,
             "$packageName.fileprovider",

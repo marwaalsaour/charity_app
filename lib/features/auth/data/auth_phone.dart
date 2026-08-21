@@ -1,7 +1,7 @@
 class AuthPhone {
   static const countryCode = '+963';
 
-  /// 9-digit Syrian mobile without leading 0 or country code, e.g. 912345678.
+  /// 9-digit national number without leading 0 or country code, e.g. 123123123.
   static String localNine(String raw) {
     var digits = raw.replaceAll(RegExp(r'\D'), '');
     if (digits.startsWith('963')) {
@@ -16,11 +16,24 @@ class AuthPhone {
     return digits;
   }
 
-  /// Canonical E.164 form used for signup and signin: +9639xxxxxxxx
+  /// International Syrian number for the API: 963 + 9 local digits.
+  /// No "+" — Laravel signup validates `regex:/^[0-9]+$/`.
+  static String forApi(String raw) {
+    final local = localNine(raw);
+    if (local.isEmpty) return digitsOnly(raw);
+    return '963$local';
+  }
+
+  /// Canonical E.164 form. Prefer [forApi] when talking to this backend.
   static String normalize(String raw) {
     final local = localNine(raw);
     if (local.isEmpty) return raw.trim();
     return '$countryCode$local';
+  }
+
+  /// Strips +, spaces, and dashes. Volunteer APIs require digits only.
+  static String digitsOnly(String raw) {
+    return raw.replaceAll(RegExp(r'\D'), '');
   }
 
   /// Formats to try when the API stored the number differently.
@@ -31,8 +44,10 @@ class AuthPhone {
       return trimmed.isEmpty ? const [] : [trimmed];
     }
     return [
-      '$countryCode$local',
+      '963$local',
       local,
+      '$countryCode$local',
+      '0$local',
     ];
   }
 }

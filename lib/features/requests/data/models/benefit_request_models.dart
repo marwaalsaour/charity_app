@@ -102,6 +102,7 @@ class BenefitRequestItem {
   final int donorsCount;
   final String currency;
   final PayoutPreference payoutPreference;
+  final bool isDisbursed;
 
   const BenefitRequestItem({
     required this.id,
@@ -117,6 +118,7 @@ class BenefitRequestItem {
     this.donorsCount = 0,
     this.currency = 'USD',
     this.payoutPreference = PayoutPreference.unset,
+    this.isDisbursed = false,
   });
 
   bool get isApproved {
@@ -148,8 +150,7 @@ class BenefitRequestItem {
   bool get isFullyFunded =>
       requiredAmount > 0 && donatedAmount >= requiredAmount;
 
-  bool get needsPayoutChoice =>
-      isFullyFunded && payoutPreference == PayoutPreference.unset;
+  bool get needsPayoutChoice => false;
 
   String get displayTitle {
     if (title != null && title!.trim().isNotEmpty) return title!.trim();
@@ -173,6 +174,7 @@ class BenefitRequestItem {
     int? donorsCount,
     String? currency,
     PayoutPreference? payoutPreference,
+    bool? isDisbursed,
   }) {
     return BenefitRequestItem(
       id: id ?? this.id,
@@ -188,6 +190,7 @@ class BenefitRequestItem {
       donorsCount: donorsCount ?? this.donorsCount,
       currency: currency ?? this.currency,
       payoutPreference: payoutPreference ?? this.payoutPreference,
+      isDisbursed: isDisbursed ?? this.isDisbursed,
     );
   }
 
@@ -230,7 +233,10 @@ class BenefitRequestItem {
         ) ??
         0;
     final donatedAmount = _toDouble(
-          json['donated_amount'] ?? json['raised'] ?? json['collected_amount'],
+          json['donated_amount'] ??
+              json['amount_collected'] ??
+              json['raised'] ??
+              json['collected_amount'],
         ) ??
         0;
     final donorsCount = _toInt(json['donors_count']) ??
@@ -264,6 +270,8 @@ class BenefitRequestItem {
       payoutPreference: PayoutPreference.fromString(
         json['payout_preference']?.toString(),
       ),
+      isDisbursed: parseBool(json['is_disbursed']) ||
+          parseBool(json['disbursed']),
     );
   }
 
@@ -284,6 +292,8 @@ class BenefitRequestItem {
         'donors_count': donorsCount,
         'currency': currency,
         'payout_preference': payoutPreference.storageValue,
+        'is_disbursed': isDisbursed,
+        'amount_collected': donatedAmount,
       };
 
   static String? extractBeneficiaryName(Map json) {

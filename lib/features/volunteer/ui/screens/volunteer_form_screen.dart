@@ -8,6 +8,8 @@ import '../../../../core/network/api_exception.dart';
 import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../auth/data/auth_phone.dart';
+import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../notifications/data/notification_helper.dart';
 import '../../../profile/data/repositories/user_profile_repository.dart';
 import '../../data/repositories/volunteer_api_repository.dart';
@@ -32,6 +34,7 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
   final _occupationController = TextEditingController();
   final _motivationController = TextEditingController();
   final _availabilityController = TextEditingController();
+  final _phoneController = TextEditingController();
 
   final Set<String> _selectedSkills = {};
   String? _selectedGender; // male | female
@@ -48,6 +51,16 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
     super.initState();
     _loadGovernorates();
     _loadExistingApplication();
+    _loadProfilePhone();
+  }
+
+  Future<void> _loadProfilePhone() async {
+    final remote = await AuthRepository().syncProfile();
+    final profile = remote ?? await UserProfileRepository().getProfile();
+    if (!mounted) return;
+    final phone = profile?.phone.trim() ?? '';
+    if (phone.isEmpty) return;
+    setState(() => _phoneController.text = phone);
   }
 
   Future<void> _loadExistingApplication() async {
@@ -102,6 +115,7 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
     _occupationController.dispose();
     _motivationController.dispose();
     _availabilityController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -151,8 +165,11 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
       return;
     }
 
-    final profile = await UserProfileRepository().getProfile();
-    final phone = profile?.phone.trim() ?? '';
+    var profile = await AuthRepository().syncProfile();
+    profile ??= await UserProfileRepository().getProfile();
+    final phone = AuthPhone.digitsOnly(
+      profile?.phone ?? _phoneController.text,
+    );
     if (phone.isEmpty) {
       _showError('volunteer_phone_from_profile_required');
       return;
@@ -258,6 +275,14 @@ class _VolunteerFormScreenState extends State<VolunteerFormScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
+            CustomTextField(
+              label: 'volunteer_phone'.tr(),
+              hint: 'volunteer_phone_from_profile_hint'.tr(),
+              prefixIcon: Icons.phone_outlined,
+              controller: _phoneController,
+              readOnly: true,
+            ),
+            const SizedBox(height: 16),
             _buildGenderDropdown(),
             const SizedBox(height: 16),
             CustomTextField(

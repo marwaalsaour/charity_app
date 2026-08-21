@@ -16,6 +16,7 @@ class CustomTextField extends StatefulWidget {
   final int maxLines;
   final List<TextInputFormatter>? inputFormatters;
   final bool readOnly;
+  final bool autofocus;
   final VoidCallback? onTap;
 
   const CustomTextField({
@@ -32,6 +33,7 @@ class CustomTextField extends StatefulWidget {
     this.maxLines = 1,
     this.inputFormatters,
     this.readOnly = false,
+    this.autofocus = false,
     this.onTap,
   });
 
@@ -49,7 +51,9 @@ class _CustomTextFieldState extends State<CustomTextField> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final labelColor = cs.onSurface;
-    final iconColor = _focused ? cs.primary : cs.onSurface.withValues(alpha: 0.4);
+    final iconColor = _focused
+        ? cs.primary
+        : cs.onSurface.withValues(alpha: 0.4);
     final fillColor = isDark
         ? AppColors.darkInputFill
         : AppColors.lightInputFill;
@@ -72,11 +76,16 @@ class _CustomTextFieldState extends State<CustomTextField> {
             controller: widget.controller,
             obscureText: widget.obscureText && _obscure,
             keyboardType: widget.keyboardType,
+            textDirection: widget.obscureText ||
+                    widget.keyboardType == TextInputType.emailAddress
+                ? TextDirection.ltr
+                : null,
             validator: widget.validator,
             onChanged: widget.onChanged,
             maxLines: widget.obscureText ? 1 : widget.maxLines,
             inputFormatters: widget.inputFormatters,
             readOnly: widget.readOnly,
+            autofocus: widget.autofocus,
             onTap: widget.onTap,
             style: TextStyle(fontSize: 14, color: cs.onSurface),
             decoration: InputDecoration(

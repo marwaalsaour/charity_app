@@ -17,6 +17,7 @@ import '../../data/case_donation_stats_cache.dart';
 import '../../../campaigns/data/models/community_campaign_model.dart';
 import '../../data/models/donation_checkout_args.dart';
 import '../../data/models/donation_receipt_model.dart';
+import '../../data/orphan_sponsorship_service.dart';
 import '../../data/repositories/donation_api_repository.dart';
 import '../../data/repositories/donation_receipt_repository.dart';
 
@@ -79,11 +80,18 @@ Future<bool> showDonationConfirmDialog(BuildContext context) async {
   return result ?? false;
 }
 
+String localizedApiMessage(String message) {
+  if (RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(message)) {
+    return message.tr();
+  }
+  return 'donate_error_generic'.tr();
+}
+
 Future<bool> showSponsorshipConfirmDialog(
   BuildContext context, {
   required double amount,
   required String currency,
-  required int months,
+  int months = 12,
 }) async {
   final cs = Theme.of(context).colorScheme;
   final result = await showDialog<bool>(
@@ -139,7 +147,7 @@ Future<DonationReceiptModel?> completeDonation({
       context,
       amount: amount,
       currency: currency,
-      months: args.sponsorshipMonths,
+      months: args.totalMonths ?? 12,
     );
   } else {
     confirmed = await showDonationConfirmDialog(context);
@@ -152,12 +160,33 @@ Future<DonationReceiptModel?> completeDonation({
         ? profile.fullName
         : 'donor_mock_name'.tr();
 
-    final receipt = await DonationApiRepository().donate(
-      args: args,
-      amount: amount,
-      currency: currency,
-      donorName: donorName,
-    );
+    final DonationReceiptModel receipt;
+    if (args.isOrphanSponsorship) {
+      final sponsorship = await OrphanSponsorshipService.instance
+          .startSponsorship(
+            args: args,
+            monthlyAmount: amount,
+            currency: currency,
+            totalMonths: args.totalMonths ?? 12,
+          );
+      receipt = DonationReceiptModel(
+        id: sponsorship.id,
+        donorName: donorName,
+        recipientOrg: 'recipient_org',
+        causeTitle: args.causeTitle,
+        amount: amount,
+        currency: currency,
+        date: DateTime.now(),
+        agent: 'receipt_agent_value',
+      );
+    } else {
+      receipt = await DonationApiRepository().donate(
+        args: args,
+        amount: amount,
+        currency: currency,
+        donorName: donorName,
+      );
+    }
 
     final localized = DonationReceiptModel(
       id: receipt.id,
@@ -194,25 +223,27 @@ Future<DonationReceiptModel?> completeDonation({
       context.push(AppRoutes.donationReceipt, extra: localized);
     }
 
-    unawaited(_afterDonationSideEffects(
-      context: context,
-      args: args,
-      amount: amount,
-      currency: currency,
-    ));
+    unawaited(
+      _afterDonationSideEffects(
+        context: context,
+        args: args,
+        amount: amount,
+        currency: currency,
+      ),
+    );
     return localized;
   } on ApiException catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(localizedApiMessage(e.message))));
     }
     return null;
   } catch (_) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('donate_error_generic'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('donate_error_generic'.tr())));
     }
     return null;
   }

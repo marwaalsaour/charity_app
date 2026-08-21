@@ -1,10 +1,10 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/network/api_exception.dart';
 import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../donations/data/models/orphan_sponsorship_model.dart';
 import '../../../donations/data/orphan_sponsorship_service.dart';
@@ -27,45 +27,28 @@ class _MySponsorshipsScreenState extends State<MySponsorshipsScreen> {
   }
 
   Future<void> _load() async {
-    final all = await OrphanSponsorshipService.instance.listAll();
-    all.sort((a, b) {
-      if (a.isActive && !b.isActive) return -1;
-      if (!a.isActive && b.isActive) return 1;
-      return b.startedAt.compareTo(a.startedAt);
-    });
-    if (!mounted) return;
-    setState(() {
-      _items = all;
-      _loading = false;
-    });
-  }
-
-  Future<void> _editAmount(OrphanSponsorship item) async {
-    final amount = await showDialog<double>(
-      context: context,
-      useRootNavigator: true,
-      builder: (ctx) => Theme(
-        data: Theme.of(context),
-        child: _EditSponsorshipAmountDialog(item: item),
-      ),
-    );
-    if (amount == null) return;
-    if (!amount.isFinite || amount <= 0) {
+    try {
+      final all = await OrphanSponsorshipService.instance.listAll();
+      all.sort((a, b) {
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        return b.startedAt.compareTo(a.startedAt);
+      });
       if (!mounted) return;
+      setState(() {
+        _items = all;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('donate_amount_invalid'))),
+        SnackBar(content: Text(e.message.tr())),
       );
-      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
-    await OrphanSponsorshipService.instance.updateMonthlyAmount(
-      item.id,
-      amount,
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.tr('sponsorship_updated'))));
-    await _load();
   }
 
   Future<void> _cancel(OrphanSponsorship item) async {
@@ -110,7 +93,15 @@ class _MySponsorshipsScreenState extends State<MySponsorshipsScreen> {
       },
     );
     if (confirmed != true) return;
-    await OrphanSponsorshipService.instance.cancelSponsorship(item.id);
+    try {
+      await OrphanSponsorshipService.instance.cancelSponsorship(item.id);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message.tr())),
+      );
+      return;
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.tr('sponsorship_cancelled_done'))),
@@ -150,7 +141,6 @@ class _MySponsorshipsScreenState extends State<MySponsorshipsScreen> {
               itemBuilder: (context, index) {
                 return _SponsorshipCard(
                   item: _items[index],
-                  onEdit: () => _editAmount(_items[index]),
                   onCancel: () => _cancel(_items[index]),
                 );
               },
@@ -162,12 +152,10 @@ class _MySponsorshipsScreenState extends State<MySponsorshipsScreen> {
 class _SponsorshipCard extends StatelessWidget {
   const _SponsorshipCard({
     required this.item,
-    required this.onEdit,
     required this.onCancel,
   });
 
   final OrphanSponsorship item;
-  final VoidCallback onEdit;
   final VoidCallback onCancel;
 
   String _statusKey() {
@@ -249,39 +237,37 @@ class _SponsorshipCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            context.tr(
-              'sponsorship_remaining_value',
-              namedArgs: {
-                'paid': '${item.paidMonths}',
-                'total': '${item.totalMonths}',
-              },
-            ),
+            item.totalMonths > 0
+                ? context.tr(
+                    'sponsorship_remaining_value',
+                    namedArgs: {
+                      'paid': '${item.paidMonths}',
+                      'total': '${item.totalMonths}',
+                    },
+                  )
+                : context.tr(
+                    'sponsorship_next_charge',
+                    namedArgs: {
+                      'date': DateFormat.yMMMd(
+                        locale.toString(),
+                      ).format(item.nextChargeAt),
+                    },
+                  ),
             style: TextStyle(fontSize: 13, color: ext.textSecondary),
           ),
           if (canManage) ...[
             const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: Text(context.tr('sponsorship_edit')),
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onCancel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cs.error,
+                  side: BorderSide(color: cs.error.withValues(alpha: 0.5)),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onCancel,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: cs.error,
-                      side: BorderSide(color: cs.error.withValues(alpha: 0.5)),
-                    ),
-                    icon: const Icon(Icons.cancel_outlined, size: 18),
-                    label: Text(context.tr('sponsorship_cancel')),
-                  ),
-                ),
-              ],
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: Text(context.tr('sponsorship_cancel')),
+              ),
             ),
           ],
         ],
@@ -294,87 +280,4 @@ String _formatAmount(double amount) {
   if (!amount.isFinite) return '0';
   final whole = amount.truncateToDouble() == amount;
   return amount.toStringAsFixed(whole ? 0 : 2);
-}
-
-class _EditSponsorshipAmountDialog extends StatefulWidget {
-  const _EditSponsorshipAmountDialog({required this.item});
-
-  final OrphanSponsorship item;
-
-  @override
-  State<_EditSponsorshipAmountDialog> createState() =>
-      _EditSponsorshipAmountDialogState();
-}
-
-class _EditSponsorshipAmountDialogState
-    extends State<_EditSponsorshipAmountDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(
-      text: _formatAmount(widget.item.monthlyAmount),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final value = double.tryParse(_controller.text.trim());
-    Navigator.pop(context, value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final ext = theme.extension<AppThemeExtension>();
-    return AlertDialog(
-      backgroundColor: ext?.cardBackground ?? theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text('sponsorship_edit_title'.tr()),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'sponsorship_edit_body'.tr(),
-              style: TextStyle(
-                height: 1.5,
-                color: ext?.textSecondary ?? theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-              ],
-              onSubmitted: (_) => _submit(),
-              decoration: InputDecoration(
-                labelText: 'sponsor_amount_label'.tr(),
-                suffixText: widget.item.currency,
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('cancel'.tr()),
-        ),
-        FilledButton(onPressed: _submit, child: Text('confirm'.tr())),
-      ],
-    );
-  }
 }

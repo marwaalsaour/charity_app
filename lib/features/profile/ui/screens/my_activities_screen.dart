@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/utils/file_share_helper.dart';
 import '../../../../core/widgets/ataa_app_bar.dart';
+import '../../../../core/widgets/custom_button.dart';
+import '../../../volunteer/data/repositories/volunteer_api_repository.dart';
 import '../../data/models/volunteer_activity_model.dart';
+import '../../data/repositories/user_profile_repository.dart';
 import '../../data/repositories/volunteer_activity_repository.dart';
 
 class MyActivitiesScreen extends StatefulWidget {
@@ -16,9 +21,13 @@ class MyActivitiesScreen extends StatefulWidget {
 }
 
 class _MyActivitiesScreenState extends State<MyActivitiesScreen> {
+  static const _requiredHours = 100;
+
   final _repository = VolunteerActivityRepository();
-  late Future<({int totalHours, List<CampaignVolunteerSummary> campaigns})>
+  late Future<({double totalHours, List<CampaignVolunteerSummary> campaigns})>
       _dataFuture;
+  var _downloading = false;
+  var _lastTotalHours = 0.0;
 
   @override
   void initState() {
@@ -32,77 +41,160 @@ class _MyActivitiesScreenState extends State<MyActivitiesScreen> {
     });
   }
 
-  Future<({int totalHours, List<CampaignVolunteerSummary> campaigns})>
+  Future<({double totalHours, List<CampaignVolunteerSummary> campaigns})>
       _fetchData() async {
-    final totalHours = await _repository.getTotalHours();
-    final campaigns = await _repository.getCampaignSummaries();
-    return (totalHours: totalHours, campaigns: campaigns);
+    try {
+      final totalHours = await _repository.getTotalHours();
+      final campaigns = await _repository.getCampaignSummaries();
+      return (totalHours: totalHours, campaigns: campaigns);
+    } catch (_) {
+      return (
+        totalHours: 0.0,
+        campaigns: <CampaignVolunteerSummary>[],
+      );
+    }
+  }
+
+  Future<void> _downloadCertificate() async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    try {
+      var hours = _lastTotalHours;
+      try {
+        final remoteHours = await _repository.getTotalHours();
+        if (remoteHours > 0) hours = remoteHours;
+      } catch (_) {}
+      if (hours < _requiredHours) {
+        throw const ApiException(
+          'volunteer_certificate_hours_required',
+          statusCode: 403,
+        );
+      }
+      final profile = await UserProfileRepository().getProfile();
+      final name = profile?.fullName.trim() ?? '';
+      final file = await VolunteerApiRepository().downloadCertificate(
+        volunteerName: name.isNotEmpty ? name : 'ATAA',
+        hours: hours,
+        isArabic: context.locale.languageCode == 'ar',
+        userId: profile?.id,
+        phone: profile?.phone,
+        email: profile?.email,
+      );
+      if (!mounted) return;
+      await FileShareHelper.shareFile(
+        path: file.path,
+        filename: 'ataa-volunteer-certificate.pdf',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      final key = _snackbarKey(e.message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr(key))),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('volunteer_certificate_error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  String _snackbarKey(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('route') || lower.contains('could not be found')) {
+      return 'volunteer_certificate_error';
+    }
+    if (lower.contains('100') && lower.contains('hour')) {
+      return 'volunteer_certificate_hours_required';
+    }
+    if (lower.contains('volunteer profile')) {
+      return 'volunteer_certificate_not_found';
+    }
+    return message;
   }
 
   @override
   Widget build(BuildContext context) {
+    final locale = context.locale;
     final cs = Theme.of(context).colorScheme;
-    final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
     return Scaffold(
-      appBar: AtaaAppBar(title: 'my_activities'.tr()),
+      key: ValueKey('my_activities_${locale.languageCode}'),
+      appBar: AtaaAppBar(title: context.tr('my_activities')),
       body: FutureBuilder<
-          ({int totalHours, List<CampaignVolunteerSummary> campaigns})>(
+          ({double totalHours, List<CampaignVolunteerSummary> campaigns})>(
         future: _dataFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return Center(child: CircularProgressIndicator(color: cs.primary));
           }
 
-          final data = snapshot.data;
-          final totalHours = data?.totalHours ?? 0;
-          final campaigns = data?.campaigns ?? [];
+          final totalHours = snapshot.data?.totalHours ?? 0;
+          final campaigns = snapshot.data?.campaigns ?? [];
+          if (snapshot.hasData) {
+            _lastTotalHours = totalHours;
+          }
+          final canDownload = totalHours >= _requiredHours;
 
-          if (campaigns.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.volunteer_activism_outlined,
-                      size: 56,
-                      color: ext.textSecondary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'no_activities_yet'.tr(),
+          return RefreshIndicator(
+            color: cs.primary,
+            onRefresh: () async => _load(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
+                _HoursCard(
+                  totalHours: totalHours,
+                  requiredHours: _requiredHours,
+                ),
+                const SizedBox(height: 12),
+                if (canDownload)
+                  CustomButton(
+                    label: context.tr('volunteer_certificate_download'),
+                    icon: Icons.workspace_premium_outlined,
+                    variant: ButtonVariant.primary,
+                    height: 52,
+                    isLoading: _downloading,
+                    onTap: _downloadCertificate,
+                  )
+                else
+                  _CertificateLockedNote(
+                    totalHours: totalHours,
+                    requiredHours: _requiredHours,
+                  ),
+                const SizedBox(height: 28),
+                Text(
+                  context.tr('my_campaigns_section'),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (campaigns.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Text(
+                      context.tr('no_activities_yet'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 16,
-                        color: ext.textSecondary,
+                        fontSize: 15,
+                        color: Theme.of(context)
+                            .extension<AppThemeExtension>()!
+                            .textSecondary,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              _TotalHoursCard(totalHours: totalHours),
-              const SizedBox(height: 24),
-              Text(
-                'my_campaigns_section'.tr(),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...campaigns.map(
-                (campaign) => _CampaignActivityCard(campaign: campaign),
-              ),
-            ],
+                  )
+                else
+                  ...campaigns.map(
+                    (campaign) => _CampaignActivityCard(campaign: campaign),
+                  ),
+              ],
+            ),
           );
         },
       ),
@@ -110,10 +202,14 @@ class _MyActivitiesScreenState extends State<MyActivitiesScreen> {
   }
 }
 
-class _TotalHoursCard extends StatelessWidget {
-  const _TotalHoursCard({required this.totalHours});
+class _HoursCard extends StatelessWidget {
+  const _HoursCard({
+    required this.totalHours,
+    required this.requiredHours,
+  });
 
-  final int totalHours;
+  final double totalHours;
+  final int requiredHours;
 
   @override
   Widget build(BuildContext context) {
@@ -121,14 +217,18 @@ class _TotalHoursCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final cs = theme.colorScheme;
     final ext = theme.extension<AppThemeExtension>()!;
+    final progress = (totalHours / requiredHours).clamp(0.0, 1.0);
+    final reached = totalHours >= requiredHours;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
         color: ext.cardBackground,
         borderRadius: BorderRadius.circular(AppRadius.large),
-        border: Border.all(color: ext.border),
+        border: Border.all(
+          color: reached ? AppColors.success.withValues(alpha: 0.45) : ext.border,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
@@ -137,46 +237,129 @@ class _TotalHoursCard extends StatelessWidget {
           ),
         ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.schedule_rounded, color: cs.primary),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.tr('total_volunteer_hours'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: ext.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      context.tr(
+                        'hours_count',
+                        namedArgs: {'count': _formatHours(totalHours)},
+                      ),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            context.tr('volunteer_hours_admin_hint'),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: ext.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: ext.progressBg,
+              valueColor: AlwaysStoppedAnimation(
+                reached ? AppColors.success : AppColors.progressFill,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            context.tr(
+              'volunteer_certificate_progress',
+              namedArgs: {
+                'current': _formatHours(totalHours),
+                'required': '$requiredHours',
+              },
+            ),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: reached ? AppColors.success : ext.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CertificateLockedNote extends StatelessWidget {
+  const _CertificateLockedNote({
+    required this.totalHours,
+    required this.requiredHours,
+  });
+
+  final double totalHours;
+  final int requiredHours;
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = (requiredHours - totalHours).clamp(0.0, requiredHours.toDouble());
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
       child: Row(
         children: [
-          Container(
-            width: 4,
-            height: 52,
-            decoration: BoxDecoration(
-              color: cs.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 16),
+          const Icon(Icons.lock_outline, size: 18, color: AppColors.primary),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'total_volunteer_hours'.tr().toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: ext.textSecondary,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'hours_count'.tr(namedArgs: {'count': '$totalHours'}),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ],
+            child: Text(
+              context.tr(
+                'volunteer_certificate_locked',
+                namedArgs: {'hours': _formatHours(remaining)},
+              ),
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryDark,
+              ),
             ),
-          ),
-          Icon(
-            Icons.schedule,
-            size: 36,
-            color: AppColors.accent.withValues(alpha: 0.9),
           ),
         ],
       ),
@@ -191,11 +374,17 @@ class _CampaignActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localeCode = context.locale.languageCode;
     final cs = Theme.of(context).colorScheme;
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
-    final date = DateFormat.yMMMd(context.locale.languageCode).format(
-      campaign.lastDate,
-    );
+    final date = DateFormat.yMMMd(localeCode).format(campaign.lastDate);
+    final title = campaign.localizedTitle(localeCode);
+    final status = campaign.statusLabel;
+    final typeLabel = campaign.typeLabel;
+    final location = campaign.localizedLocation(localeCode);
+    final subtitle = status.isNotEmpty
+        ? status
+        : (typeLabel.isNotEmpty ? typeLabel : location);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -217,17 +406,17 @@ class _CampaignActivityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  campaign.displayTitle,
+                  title,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: cs.onSurface,
                   ),
                 ),
-                const SizedBox(height: 4),
-                if (campaign.status.isNotEmpty)
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    campaign.statusLabel,
+                    subtitle,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -237,12 +426,15 @@ class _CampaignActivityCard extends StatelessWidget {
                               ? Colors.green.shade700
                               : ext.textSecondary,
                     ),
-                  )
-                else
+                  ),
+                ],
+                if (typeLabel.isNotEmpty && status.isNotEmpty) ...[
+                  const SizedBox(height: 2),
                   Text(
-                    campaign.displayLocation,
+                    typeLabel,
                     style: TextStyle(fontSize: 12, color: ext.textSecondary),
                   ),
+                ],
                 const SizedBox(height: 2),
                 Text(
                   date,
@@ -258,7 +450,10 @@ class _CampaignActivityCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              'hours_count'.tr(namedArgs: {'count': '${campaign.totalHours}'}),
+              context.tr(
+                'hours_count',
+                namedArgs: {'count': '${campaign.totalHours}'},
+              ),
               style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 13,
@@ -270,4 +465,10 @@ class _CampaignActivityCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatHours(double hours) {
+  if (!hours.isFinite) return '0';
+  if (hours.truncateToDouble() == hours) return hours.toStringAsFixed(0);
+  return hours.toStringAsFixed(1);
 }

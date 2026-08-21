@@ -8,16 +8,17 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/user_role.dart';
 import '../../../../core/auth/user_role_cubit.dart';
+import '../../../../core/auth/session_store.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_radius.dart';
 import '../../../../core/constants/app_theme_extensions.dart';
+import '../../../../core/network/api_exception.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../requests/logic/cubit/request_cubit.dart';
 import '../../../requests/logic/states/request_state.dart';
 import '../../data/models/user_profile_model.dart';
 import '../../data/models/wallet_currencies.dart';
-import '../../data/repositories/beneficiary_wallet_store.dart';
 import '../../data/repositories/user_profile_repository.dart';
 import '../widgets/wallet_card.dart';
 import 'my_sponsorships_screen.dart';
@@ -38,6 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loadingWallet = true;
   UserProfileModel? _profile;
   bool _loadingProfile = true;
+  bool _deletingAccount = false;
 
   bool get _isBeneficiary => widget.role == UserRole.beneficiary;
 
@@ -52,15 +54,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadingWallet = false;
   }
 
-  Future<void> _mergeBeneficiaryCredits() async {
-    if (!_isBeneficiary) return;
-    final credits = await BeneficiaryWalletStore().loadBalances();
-    if (!mounted || credits.isEmpty) return;
-    setState(() {
-      _walletBalances = WalletCurrencies.merge([_walletBalances, credits]);
-    });
-  }
-
   Future<void> _loadWallet() async {
     final remote = await AuthRepository().syncProfile();
     final profile = remote ?? await _profileRepository.getProfile();
@@ -69,7 +62,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (remote != null) _profile = remote;
       _applyWalletFrom(profile);
     });
-    await _mergeBeneficiaryCredits();
   }
 
   Future<void> _loadProfile() async {
@@ -80,7 +72,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _loadingProfile = false;
       _applyWalletFrom(local);
     });
-    await _mergeBeneficiaryCredits();
 
     final remote = await AuthRepository().syncProfile();
     if (!mounted || remote == null) return;
@@ -88,7 +79,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _profile = remote;
       _applyWalletFrom(remote);
     });
-    await _mergeBeneficiaryCredits();
   }
 
   Future<void> _openEditProfile() async {
@@ -105,6 +95,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return _isBeneficiary
         ? 'beneficiary_mock_name'.tr()
         : 'donor_mock_name'.tr();
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final theme = Theme.of(context);
+    final ext = theme.extension<AppThemeExtension>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (ctx) {
+        return Theme(
+          data: theme,
+          child: AlertDialog(
+            backgroundColor: ext?.cardBackground ?? theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text('delete_account_title'.tr()),
+            content: Text(
+              'delete_account_confirm_body'.tr(),
+              style: TextStyle(
+                height: 1.5,
+                color: ext?.textSecondary ?? theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('cancel'.tr()),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.error,
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('delete_account_confirm'.tr()),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    await _deleteAccount();
+  }
+
+  Future<void> _deleteAccount() async {
+    setState(() => _deletingAccount = true);
+    try {
+      await AuthRepository().deleteAccount();
+      await SessionStore.clearUserData();
+      if (!mounted) return;
+      SessionStore.resetBlocs(context);
+      await context.read<UserRoleCubit>().clearRole();
+      if (!mounted) return;
+      context.go(widget.role.loginRoute);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _deletingAccount = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message.tr())));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _deletingAccount = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('delete_account_failed'.tr())));
+    }
   }
 
   String? get _imagePath => _profile?.imagePath;
@@ -129,118 +187,136 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: RefreshIndicator(
         onRefresh: _loadProfile,
         child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        children: [
-          const SizedBox(height: 8),
-          _AvatarSection(
-            name: _displayName,
-            imagePath: _imagePath,
-            memberSinceYear: _memberSinceYear,
-            roleLabel: _isBeneficiary
-                ? 'profile_beneficiary_role'.tr()
-                : 'profile_donor_role'.tr(),
-            isLoading: _loadingProfile,
-            onEditTap: _openEditProfile,
-          ),
-          const SizedBox(height: 24),
-          WalletCard(
-            balances: _walletBalances,
-            isLoading: _loadingWallet,
-          ),
-          if (_isBeneficiary) ...[
-            const SizedBox(height: 16),
-            BlocBuilder<RequestCubit, RequestState>(
-              builder: (context, state) => _BeneficiaryRequestsCard(
-                count: state.myRequests
-                    .where((r) => r.isPending || r.isApproved)
-                    .length,
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            const SizedBox(height: 8),
+            _AvatarSection(
+              name: _displayName,
+              imagePath: _imagePath,
+              memberSinceYear: _memberSinceYear,
+              roleLabel: _isBeneficiary
+                  ? 'profile_beneficiary_role'.tr()
+                  : 'profile_donor_role'.tr(),
+              isLoading: _loadingProfile,
+              onEditTap: _openEditProfile,
+            ),
+            const SizedBox(height: 24),
+            WalletCard(balances: _walletBalances, isLoading: _loadingWallet),
+            if (_isBeneficiary) ...[
+              const SizedBox(height: 16),
+              BlocBuilder<RequestCubit, RequestState>(
+                builder: (context, state) => _BeneficiaryRequestsCard(
+                  count: state.myRequests
+                      .where((r) => r.isPending || r.isApproved)
+                      .length,
+                ),
               ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          if (_isBeneficiary) ...[
-            _ProfileMenuTile(
-              icon: Icons.assignment_outlined,
-              iconColor: cs.primary,
-              iconBg: cs.primary.withValues(alpha: 0.1),
-              title: 'my_requests'.tr(),
-              onTap: () => context.go(AppRoutes.beneficiaryRequests),
-            ),
-            const SizedBox(height: 10),
-          ] else ...[
-            _ProfileMenuTile(
-              icon: Icons.volunteer_activism_outlined,
-              iconColor: cs.primary,
-              iconBg: cs.primary.withValues(alpha: 0.1),
-              title: 'my_activities'.tr(),
-              onTap: () => context.push(AppRoutes.myActivities),
-            ),
-            const SizedBox(height: 10),
-            _ProfileMenuTile(
-              icon: Icons.favorite,
-              iconColor: AppColors.accentDark,
-              iconBg: AppColors.accent.withValues(alpha: 0.25),
-              title: 'my_donations'.tr(),
-              onTap: () async {
-                await context.push(AppRoutes.myDonations);
-                _loadWallet();
-              },
-            ),
-            const SizedBox(height: 10),
-            _ProfileMenuTile(
-              icon: Icons.child_care_outlined,
-              iconColor: cs.primary,
-              iconBg: cs.primary.withValues(alpha: 0.1),
-              title: context.tr('my_sponsorships'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const MySponsorshipsScreen(),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
-          _ProfileMenuTile(
-            icon: Icons.edit_outlined,
-            iconColor: cs.primary,
-            iconBg: ext.inputFill,
-            title: 'edit_profile'.tr(),
-            onTap: _openEditProfile,
-          ),
-          const SizedBox(height: 28),
-          _LogoutButton(
-            onTap: () async {
-              await AuthRepository().logout();
-              if (!context.mounted) return;
-              await context.read<UserRoleCubit>().clearRole();
-              if (!context.mounted) return;
-              context.go(widget.role.loginRoute);
-            },
-          ),
-          const SizedBox(height: 32),
-          Center(
-            child: Opacity(
-              opacity: isDark ? 0.4 : 0.25,
-              child: Column(
-                children: [
-                  Icon(Icons.volunteer_activism, size: 32, color: cs.primary),
-                  const SizedBox(height: 4),
-                  Text(
-                    'app_name'.tr(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                      color: cs.primary,
+            ],
+            const SizedBox(height: 24),
+            if (_isBeneficiary) ...[
+              _ProfileMenuTile(
+                icon: Icons.assignment_outlined,
+                iconColor: cs.primary,
+                iconBg: cs.primary.withValues(alpha: 0.1),
+                title: 'my_requests'.tr(),
+                onTap: () => context.go(AppRoutes.beneficiaryRequests),
+              ),
+              const SizedBox(height: 10),
+            ] else ...[
+              _ProfileMenuTile(
+                icon: Icons.volunteer_activism_outlined,
+                iconColor: cs.primary,
+                iconBg: cs.primary.withValues(alpha: 0.1),
+                title: 'my_activities'.tr(),
+                onTap: () => context.push(AppRoutes.myActivities),
+              ),
+              const SizedBox(height: 10),
+              _ProfileMenuTile(
+                icon: Icons.favorite,
+                iconColor: AppColors.accentDark,
+                iconBg: AppColors.accent.withValues(alpha: 0.25),
+                title: 'my_donations'.tr(),
+                onTap: () async {
+                  await context.push(AppRoutes.myDonations);
+                  _loadWallet();
+                },
+              ),
+              const SizedBox(height: 10),
+              _ProfileMenuTile(
+                icon: Icons.child_care_outlined,
+                iconColor: cs.primary,
+                iconBg: cs.primary.withValues(alpha: 0.1),
+                title: context.tr('my_sponsorships'),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MySponsorshipsScreen(),
                     ),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+            _ProfileMenuTile(
+              icon: Icons.edit_outlined,
+              iconColor: cs.primary,
+              iconBg: ext.inputFill,
+              title: 'edit_profile'.tr(),
+              onTap: _openEditProfile,
+            ),
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Expanded(
+                  child: _ProfileDangerButton(
+                    icon: Icons.logout,
+                    label: 'logout'.tr(),
+                    filled: true,
+                    enabled: !_deletingAccount,
+                    onTap: () async {
+                      await AuthRepository().logout();
+                      if (!context.mounted) return;
+                      await context.read<UserRoleCubit>().clearRole();
+                      if (!context.mounted) return;
+                      context.go(widget.role.loginRoute);
+                    },
                   ),
-                ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ProfileDangerButton(
+                    icon: Icons.delete_forever_outlined,
+                    label: 'delete_account'.tr(),
+                    filled: false,
+                    loading: _deletingAccount,
+                    enabled: !_deletingAccount,
+                    onTap: _confirmDeleteAccount,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Center(
+              child: Opacity(
+                opacity: isDark ? 0.4 : 0.25,
+                child: Column(
+                  children: [
+                    Icon(Icons.volunteer_activism, size: 32, color: cs.primary),
+                    const SizedBox(height: 4),
+                    Text(
+                      'app_name'.tr(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -524,36 +600,71 @@ class _ProfileMenuTile extends StatelessWidget {
   }
 }
 
-class _LogoutButton extends StatelessWidget {
-  const _LogoutButton({required this.onTap});
+class _ProfileDangerButton extends StatelessWidget {
+  const _ProfileDangerButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.filled,
+    this.loading = false,
+    this.enabled = true,
+  });
 
+  final IconData icon;
+  final String label;
   final VoidCallback onTap;
+  final bool filled;
+  final bool loading;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = filled
+        ? (isDark
+              ? AppColors.error.withValues(alpha: 0.15)
+              : const Color(0xFFFDECEA))
+        : Colors.transparent;
+    final borderColor = AppColors.error.withValues(alpha: filled ? 0 : 0.45);
 
     return Material(
-      color: isDark
-          ? AppColors.error.withValues(alpha: 0.15)
-          : const Color(0xFFFDECEA),
+      color: bg,
       borderRadius: BorderRadius.circular(AppRadius.medium),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.medium),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+        onTap: enabled && !loading ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            border: Border.all(color: borderColor),
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.logout, color: AppColors.error, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'logout'.tr(),
-                style: const TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
+              if (loading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.error,
+                  ),
+                )
+              else
+                Icon(icon, color: AppColors.error, size: 20),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],

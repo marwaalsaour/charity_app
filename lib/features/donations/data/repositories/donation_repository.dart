@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_constants.dart';
@@ -76,7 +77,11 @@ class DonationRepository {
       if (category == null) continue;
       final mapped = _mapRequest(json, category);
       if (mapped == null) continue;
-      byId[mapped.id] = _mergeDonationConsent(byId[mapped.id], mapped);
+      byId[mapped.id] = _mergeDonationConsent(
+        byId[mapped.id],
+        mapped,
+        preferIncomingOrphanId: false,
+      );
       anySuccess = true;
     }
 
@@ -94,7 +99,11 @@ class DonationRepository {
     return _enrichWithLocalStats(withConsent);
   }
 
-  DonationModel _mergeDonationConsent(DonationModel? existing, DonationModel incoming) {
+  DonationModel _mergeDonationConsent(
+    DonationModel? existing,
+    DonationModel incoming, {
+    bool preferIncomingOrphanId = true,
+  }) {
     if (existing == null) return incoming;
     final show = existing.showBeneficiaryName || incoming.showBeneficiaryName;
     final incomingName = incoming.beneficiaryName?.trim();
@@ -102,12 +111,16 @@ class DonationRepository {
     final name = (incomingName != null && incomingName.isNotEmpty)
         ? incomingName
         : existingName;
+    final orphanId = preferIncomingOrphanId
+        ? (incoming.orphanId ?? existing.orphanId)
+        : (existing.orphanId ?? incoming.orphanId);
     return incoming.copyWith(
       showBeneficiaryName: show,
       beneficiaryName: name,
       raised: math.max(existing.raised, incoming.raised),
       donorsCount: math.max(existing.donorCount, incoming.donorCount),
       nameKey: show && name != null && name.isNotEmpty ? name : incoming.nameKey,
+      orphanId: orphanId,
     );
   }
 
@@ -185,7 +198,34 @@ class DonationRepository {
       'deadline_at': item.deadlineAt?.toIso8601String(),
       'donors_count': item.donorsCount,
       'currency': item.currency,
+      if (item.orphanId != null) ...{
+        'orphan_id': item.orphanId,
+        'orphan': {'id': item.orphanId},
+      },
     };
+  }
+
+  /// Live nested orphan row id for a request. Reads the API payload before flattening.
+  Future<int?> resolveOrphanIdForRequest(int requestId) async {
+    if (requestId <= 0) return null;
+    for (final endpoint in [
+      '/getopenacceptedorphans',
+      '/getopenacceptedrequests',
+    ]) {
+      try {
+        final maps = await _fetchEndpointMaps(endpoint, normalize: false);
+        for (final json in maps) {
+          final rid = _toInt(json['id']);
+          if (rid != requestId) continue;
+          debugPrint('[sponsor] $endpoint request $requestId orphan=${json['orphan']}');
+          final orphanId = _extractOrphanRowId(json);
+          if (orphanId != null && orphanId > 0) return orphanId;
+        }
+      } catch (e) {
+        debugPrint('[sponsor] $endpoint failed: $e');
+      }
+    }
+    return null;
   }
 
   Future<List<DonationModel>?> _tryFetchAllRequestsEndpoint() async {
@@ -274,12 +314,18 @@ class DonationRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchEndpointMaps(String endpoint) async {
+  Future<List<Map<String, dynamic>>> _fetchEndpointMaps(
+    String endpoint, {
+    bool normalize = true,
+  }) async {
     final response = await _dio.get(endpoint);
-    return _extractMaps(response.data);
+    return _extractMaps(response.data, normalize: normalize);
   }
 
-  List<Map<String, dynamic>> _extractMaps(dynamic data) {
+  List<Map<String, dynamic>> _extractMaps(
+    dynamic data, {
+    bool normalize = true,
+  }) {
     final list = <dynamic>[];
 
     if (data is List) {
@@ -303,17 +349,36 @@ class DonationRepository {
     final result = <Map<String, dynamic>>[];
     for (final item in list) {
       if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
       result.add(
-        BenefitRequestItem.normalizeCaseJson(Map<String, dynamic>.from(item)),
+        normalize ? BenefitRequestItem.normalizeCaseJson(map) : map,
       );
     }
     return result;
+  }
+
+  int? _extractOrphanRowId(Map<String, dynamic> json) {
+    dynamic nested = json['orphan'] ?? json['orphans'];
+    if (nested is List && nested.isNotEmpty) {
+      nested = nested.first;
+    }
+    if (nested is Map) {
+      var map = Map<String, dynamic>.from(nested);
+      final wrapped = map['data'];
+      if (wrapped is Map) {
+        map = Map<String, dynamic>.from(wrapped);
+      }
+      final id = _toInt(map['id']);
+      if (id != null && id > 0) return id;
+    }
+    return _toInt(json['orphan_id'] ?? json['orphanId']);
   }
 
   DonationModel? _mapRequest(
     Map<String, dynamic> json,
     DonationCategory category,
   ) {
+    final orphanId = _extractOrphanRowId(json);
     json = BenefitRequestItem.normalizeCaseJson(json);
     final id = _toInt(json['id']);
     if (id == null || id <= 0) return null;
@@ -339,7 +404,9 @@ class DonationRepository {
             : 'donation_case_open_desc'.tr();
 
     final goal = _toDouble(json['required_amount']);
-    final raised = _toDouble(json['donated_amount']);
+    final raised = _toDouble(
+      json['donated_amount'] ?? json['amount_collected'] ?? json['raised'],
+    );
     final imagePath = json['personal_picture']?.toString();
     final image = (imagePath != null &&
             (imagePath.startsWith('http://') ||
@@ -379,6 +446,7 @@ class DonationRepository {
       residence: residence,
       institution: institution,
       currency: currency,
+      orphanId: orphanId,
     );
   }
 

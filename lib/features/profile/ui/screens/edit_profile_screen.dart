@@ -8,6 +8,7 @@ import '../../../../core/network/api_exception.dart';
 import '../../../../core/widgets/ataa_app_bar.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../auth/data/auth_phone.dart';
 import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../auth/ui/widgets/auth_phone_field.dart';
 import '../../data/repositories/user_profile_repository.dart';
@@ -26,6 +27,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _repository = UserProfileRepository();
   final _authRepository = AuthRepository();
 
@@ -45,6 +49,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _lastNameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -55,7 +62,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (saved != null) {
       _firstNameController.text = saved.firstName;
       _lastNameController.text = saved.lastName;
-      _phoneController.text = saved.phone;
+      _phoneController.text = AuthPhone.localNine(saved.phone);
       _addressController.text = saved.address;
       _imagePath = saved.imagePath;
     } else {
@@ -70,7 +77,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() {
       _firstNameController.text = remote.firstName;
       _lastNameController.text = remote.lastName;
-      _phoneController.text = remote.phone;
+      _phoneController.text = AuthPhone.localNine(remote.phone);
       _addressController.text = remote.address;
       _imagePath = remote.imagePath;
     });
@@ -89,6 +96,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         address: _addressController.text.trim(),
         localImagePath: _imagePath,
       );
+      final current = _currentPasswordController.text;
+      final next = _newPasswordController.text;
+      if (current.isNotEmpty || next.isNotEmpty) {
+        await _authRepository.changePassword(
+          currentPassword: current,
+          newPassword: next,
+        );
+      }
       if (!mounted) return;
 
       setState(() => _saving = false);
@@ -213,6 +228,72 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           validator: (v) {
                             if (v == null || v.trim().isEmpty) {
                               return 'profile_address_required'.tr();
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: ext.cardBackground,
+                      borderRadius: BorderRadius.circular(AppRadius.large),
+                      border: Border.all(color: ext.border),
+                    ),
+                    child: Column(
+                      children: [
+                        CustomTextField(
+                          label: 'change_password_current'.tr(),
+                          hint: 'password_hint'.tr(),
+                          prefixIcon: Icons.lock_outline,
+                          controller: _currentPasswordController,
+                          obscureText: true,
+                          validator: (v) {
+                            final next = _newPasswordController.text;
+                            if (next.isEmpty && (v == null || v.isEmpty)) {
+                              return null;
+                            }
+                            if (v == null || v.isEmpty) {
+                              return 'change_password_current_required'.tr();
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        CustomTextField(
+                          label: 'change_password_new'.tr(),
+                          hint: 'auth_password_min'.tr(),
+                          prefixIcon: Icons.lock_reset_outlined,
+                          controller: _newPasswordController,
+                          obscureText: true,
+                          validator: (v) {
+                            final current = _currentPasswordController.text;
+                            if (current.isEmpty && (v == null || v.isEmpty)) {
+                              return null;
+                            }
+                            if (v == null || v.length < 6) {
+                              return 'auth_password_min'.tr();
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        CustomTextField(
+                          label: 'change_password_confirm'.tr(),
+                          hint: 'auth_confirm_password'.tr(),
+                          prefixIcon: Icons.lock_outline,
+                          controller: _confirmPasswordController,
+                          obscureText: true,
+                          validator: (v) {
+                            final next = _newPasswordController.text;
+                            if (next.isEmpty && (v == null || v.isEmpty)) {
+                              return null;
+                            }
+                            if (v != next) {
+                              return 'auth_password_mismatch'.tr();
                             }
                             return null;
                           },

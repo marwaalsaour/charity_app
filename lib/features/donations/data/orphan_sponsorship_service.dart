@@ -1,143 +1,107 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/network/api_exception.dart';
 import '../../auth/data/repositories/auth_repository.dart';
 import '../../notifications/data/notification_helper.dart';
 import '../../profile/data/repositories/user_profile_repository.dart';
 import 'models/donation_checkout_args.dart';
 import 'models/orphan_sponsorship_model.dart';
-import 'repositories/donation_api_repository.dart';
+import 'repositories/donation_repository.dart';
+import 'repositories/orphan_sponsorship_api_repository.dart';
 import 'repositories/orphan_sponsorship_repository.dart';
 
 class OrphanSponsorshipService {
   OrphanSponsorshipService._();
 
   static final instance = OrphanSponsorshipService._();
-  static final _repository = OrphanSponsorshipRepository();
+  static final _local = OrphanSponsorshipRepository();
+  static final _api = OrphanSponsorshipApiRepository();
 
-  Future<void> startSponsorship({
+  Future<OrphanSponsorship> startSponsorship({
     required DonationCheckoutArgs args,
-    required double amount,
+    required double monthlyAmount,
     required String currency,
-    required int months,
+    int totalMonths = 12,
   }) async {
-    final now = DateTime.now();
-    final sponsorship = OrphanSponsorship(
-      id: 'sp_${now.millisecondsSinceEpoch}',
-      requestId: args.targetId,
-      childName: args.causeTitle,
-      monthlyAmount: amount,
-      currency: currency,
-      totalMonths: months,
-      paidMonths: 1,
-      startedAt: now,
-      nextChargeAt: DateTime(now.year, now.month + 1, now.day),
+    var orphanId = args.orphanId ?? 0;
+    final requestId = args.targetId ?? 0;
+    if (requestId > 0) {
+      // Best-effort resolve; the backend's open-lists exclude orphans that
+      // are already sponsored, so a failed resolve does NOT mean the id is
+      // invalid — it can simply mean the sponsorship already went through
+      // (or is being retried). Never fail locally here.
+      final resolved =
+          await DonationRepository().resolveOrphanIdForRequest(requestId);
+      if (resolved != null && resolved > 0) {
+        orphanId = resolved;
+      } else if (orphanId <= 0) {
+        // Fall back to the request id itself — the repository below already
+        // knows how to retry with requestId if this turns out wrong.
+        orphanId = requestId;
+      }
+    }
+    if (orphanId <= 0) {
+      throw const ApiException('sponsor_orphan_missing');
+    }
+    debugPrint(
+      '[sponsor] requestId=$requestId resolvedOrphanId=$orphanId '
+      'argsOrphanId=${args.orphanId}',
     );
-    await _repository.upsert(sponsorship);
-    await notifyIfWalletEmpty(sponsorship);
+
+    final created = await _api.sponsor(
+      orphanId: orphanId,
+      requestId: requestId > 0 ? requestId : null,
+    );
+    final title = args.causeTitle.trim();
+    final named = created.copyWith(
+      childName: title.isNotEmpty ? title : created.childName,
+      monthlyAmount: monthlyAmount,
+      currency: currency,
+      totalMonths: totalMonths,
+    );
+    await _local.upsert(named);
+    await AuthRepository().syncProfile();
+    return named;
+  }
+
+  Future<List<OrphanSponsorship>> listAll() async {
+    try {
+      final remote = await _api.fetchMine();
+      for (final item in remote) {
+        await _local.upsert(item);
+      }
+      return remote;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) rethrow;
+      final local = await _local.getAll();
+      if (local.isNotEmpty) return local;
+      rethrow;
+    }
   }
 
   Future<void> continueSponsorship(String id) async {
-    final item = await _repository.getById(id);
+    final item = await _local.getById(id);
     if (item == null) return;
-    await _repository.upsert(item.copyWith(needsDecision: false));
+    await _local.upsert(item.copyWith(needsDecision: false));
   }
 
   Future<void> cancelSponsorship(String id) async {
-    final item = await _repository.getById(id);
-    if (item == null) return;
-    await _repository.upsert(
-      item.copyWith(status: 'cancelled', needsDecision: false),
-    );
-  }
-
-  Future<void> updateMonthlyAmount(String id, double amount) async {
-    final item = await _repository.getById(id);
-    if (item == null || amount <= 0) return;
-    await _repository.upsert(item.copyWith(monthlyAmount: amount));
-  }
-
-  Future<List<OrphanSponsorship>> listAll() => _repository.getAll();
-
-  Future<void> processDueCharges() async {
-    final active = await _repository.getActive();
-    if (active.isEmpty) return;
-
-    final profile = await AuthRepository().syncProfile() ??
-        await UserProfileRepository().getProfile();
-    final balances = profile?.walletBalances ?? const <String, double>{};
-    final now = DateTime.now();
-
-    for (final item in active) {
-      if (item.nextChargeAt.isAfter(now)) continue;
-
-      final available = balances[item.currency] ?? 0;
-      if (available < item.monthlyAmount) {
-        await _markEmpty(item);
-        continue;
-      }
-
-      try {
-        await DonationApiRepository().donate(
-          args: DonationCheckoutArgs(
-            causeTitle: item.childName,
-            targetType: item.requestId != null && item.requestId! > 0
-                ? DonationTargetType.request
-                : DonationTargetType.association,
-            targetId: item.requestId,
-          ),
-          amount: item.monthlyAmount,
-          currency: item.currency,
-          donorName: profile?.fullName ?? 'donor_mock_name'.tr(),
-        );
-        final paid = item.paidMonths + 1;
-        final next = DateTime(now.year, now.month + 1, now.day);
-        await _repository.upsert(
-          item.copyWith(
-            paidMonths: paid,
-            nextChargeAt: next,
-            status: paid >= item.totalMonths ? 'completed' : 'active',
-            needsDecision: false,
-          ),
-        );
-        await AuthRepository().syncProfile();
-      } catch (_) {
-        await _markEmpty(item);
-      }
+    final item = await _local.getById(id);
+    final orphanId = item?.apiOrphanId ?? int.tryParse(id) ?? 0;
+    if (orphanId > 0) {
+      await _api.cancel(orphanId);
     }
-  }
-
-  Future<void> notifyIfWalletEmpty(
-    OrphanSponsorship item, {
-    Map<String, double>? balances,
-  }) async {
-    Map<String, double> wallet = balances ?? const {};
-    if (balances == null) {
-      final profile = await UserProfileRepository().getProfile();
-      wallet = profile?.walletBalances ?? const {};
-    }
-    final available = wallet[item.currency] ?? 0;
-    if (available >= item.monthlyAmount) {
-      if (item.needsDecision) {
-        await _repository.upsert(item.copyWith(needsDecision: false));
-      }
-      return;
-    }
-    await _markEmpty(item);
-  }
-
-  Future<void> _markEmpty(OrphanSponsorship item) async {
-    if (!item.needsDecision) {
-      await NotificationHelper.notifySponsorshipWalletEmpty(
-        childName: item.childName,
-        sponsorshipId: item.id,
+    if (item != null) {
+      await _local.upsert(
+        item.copyWith(status: 'cancelled', needsDecision: false),
       );
     }
-    await _repository.upsert(item.copyWith(needsDecision: true));
   }
 
   Future<OrphanSponsorship?> firstNeedingDecision() async {
-    final active = await _repository.getActive();
+    final active = await _local.getActive();
     for (final item in active) {
       if (item.needsDecision) return item;
     }
@@ -155,7 +119,9 @@ class OrphanSponsorshipService {
         final theme = Theme.of(ctx);
         return AlertDialog(
           backgroundColor: theme.cardColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text('sponsorship_wallet_empty_title'.tr()),
           content: Text(
             'sponsorship_wallet_empty_body'.tr(
@@ -184,7 +150,7 @@ class OrphanSponsorshipService {
   }) async {
     OrphanSponsorship? item;
     if (sponsorshipId != null && sponsorshipId.isNotEmpty) {
-      item = await _repository.getById(sponsorshipId);
+      item = await _local.getById(sponsorshipId);
       if (item != null && !item.needsDecision) return;
     }
     item ??= await instance.firstNeedingDecision();
@@ -198,9 +164,23 @@ class OrphanSponsorshipService {
     }
   }
 
+  /// Server cron (`orphans:process-monthly-deductions`) charges due months.
   static Future<void> processDueAndPrompt(BuildContext context) async {
-    await instance.processDueCharges();
+    await instance.listAll();
+    await AuthRepository().syncProfile();
     if (!context.mounted) return;
     await handleDecision(context);
+  }
+
+  Future<void> notifyIfWalletEmpty(OrphanSponsorship item) async {
+    final profile = await UserProfileRepository().getProfile();
+    final wallet = profile?.walletBalances ?? const <String, double>{};
+    final available = wallet[item.currency] ?? 0;
+    if (available >= item.monthlyAmount) return;
+    await NotificationHelper.notifySponsorshipWalletEmpty(
+      childName: item.childName,
+      sponsorshipId: item.id,
+    );
+    await _local.upsert(item.copyWith(needsDecision: true));
   }
 }

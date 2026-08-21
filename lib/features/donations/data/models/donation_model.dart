@@ -76,6 +76,9 @@ class DonationModel {
   /// Currency the case was published in. Same for donor and beneficiary.
   final String currency;
 
+  /// Nested Laravel orphan id (POST /orphanssponsor/{id}).
+  final int? orphanId;
+
   const DonationModel({
     required this.id,
     required this.nameKey,
@@ -102,13 +105,13 @@ class DonationModel {
     this.residence,
     this.institution,
     this.currency = 'USD',
+    this.orphanId,
   });
 
   String get displayCurrency =>
       WalletCurrencies.normalizeCode(currency) ?? 'USD';
 
-  double get progress =>
-      goal > 0 ? (raised / goal).clamp(0.0, 1.0) : 0.0;
+  double get progress => goal > 0 ? (raised / goal).clamp(0.0, 1.0) : 0.0;
 
   bool get isFullyFunded => goal > 0 && raised >= goal;
 
@@ -148,15 +151,19 @@ class DonationModel {
   String formatGoal([Locale? locale]) => formatMoney(goal, locale);
 
   DonationCheckoutArgs get checkoutArgs => DonationCheckoutArgs(
-        causeTitle: cardTitle,
-        targetType: donateTargetType,
-        targetId: id > 0 ? id : null,
-        caseCurrency: displayCurrency,
-      );
+    causeTitle: cardTitle,
+    targetType: donateTargetType,
+    targetId: id > 0 ? id : null,
+    caseCurrency: displayCurrency,
+  );
 
-  DonationCheckoutArgs get sponsorshipCheckoutArgs => checkoutArgs.copyWith(
-        isOrphanSponsorship: true,
-      );
+  double get remainingAmount {
+    final left = goal - raised;
+    return left > 0 ? left : 0;
+  }
+
+  DonationCheckoutArgs get sponsorshipCheckoutArgs =>
+      checkoutArgs.copyWith(isOrphanSponsorship: true, orphanId: orphanId);
 
   DonationModel copyWith({
     int? id,
@@ -177,6 +184,7 @@ class DonationModel {
     String? residence,
     String? institution,
     String? currency,
+    int? orphanId,
   }) {
     return DonationModel(
       id: id ?? this.id,
@@ -204,14 +212,13 @@ class DonationModel {
       residence: residence ?? this.residence,
       institution: institution ?? this.institution,
       currency: currency ?? this.currency,
+      orphanId: orphanId ?? this.orphanId,
     );
   }
 
-  String get displayName =>
-      useTranslationKeys ? nameKey.tr() : nameKey;
+  String get displayName => useTranslationKeys ? nameKey.tr() : nameKey;
 
-  String get displayTitle =>
-      useTranslationKeys ? titleKey.tr() : titleKey;
+  String get displayTitle => useTranslationKeys ? titleKey.tr() : titleKey;
 
   String get displayDescription =>
       useTranslationKeys ? descriptionKey.tr() : descriptionKey;
@@ -230,10 +237,8 @@ class DonationModel {
       goal: (json['goal'] as num).toDouble(),
       image: json['image'] as String? ?? '',
       isUrgent: json['is_urgent'] as bool? ?? false,
-      currency: WalletCurrencies.normalizeCode(
-            json['currency']?.toString(),
-          ) ??
-          'USD',
+      currency:
+          WalletCurrencies.normalizeCode(json['currency']?.toString()) ?? 'USD',
     );
   }
 }
