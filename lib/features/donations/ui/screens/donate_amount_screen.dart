@@ -13,7 +13,6 @@ import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../profile/data/models/wallet_currencies.dart';
 import '../../../profile/data/repositories/user_profile_repository.dart';
 import '../../data/models/donation_checkout_args.dart';
-import '../../data/orphan_sponsorship_service.dart';
 import '../utils/donation_flow_helper.dart';
 
 class DonateAmountScreen extends StatefulWidget {
@@ -31,10 +30,12 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
   bool _loadingWallet = true;
   Map<String, double> _balances = WalletCurrencies.empty;
   String _currency = 'USD';
-  int _sponsorshipMonths = 12;
+  int _months = 12;
 
   static const _quickAmounts = [50, 100, 250, 500];
-  static const _monthOptions = [1, 3, 6, 12];
+  static const _monthOptions = [3, 6, 12, 24];
+
+  bool get _isSponsorship => widget.args.isOrphanSponsorship;
 
   List<String> get _fundedCodes => WalletCurrencies.codes
       .where((code) => (_balances[code] ?? 0) > 0)
@@ -45,6 +46,7 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
   @override
   void initState() {
     super.initState();
+    _months = widget.args.totalMonths ?? 12;
     _loadWallet();
   }
 
@@ -62,10 +64,8 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
     final funded = WalletCurrencies.codes
         .where((code) => (wallet[code] ?? 0) > 0)
         .toList();
-    final caseCurrency = WalletCurrencies.normalizeCode(
-          widget.args.caseCurrency,
-        ) ??
-        'USD';
+    final caseCurrency =
+        WalletCurrencies.normalizeCode(widget.args.caseCurrency) ?? 'USD';
     setState(() {
       _balances = wallet;
       if (funded.contains(caseCurrency)) {
@@ -96,17 +96,11 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
     setState(() => _isSubmitting = true);
     final receipt = await completeDonation(
       context: context,
-      args: widget.args.copyWith(sponsorshipMonths: _sponsorshipMonths),
+      args: widget.args.copyWith(totalMonths: _isSponsorship ? _months : null),
       amount: amount,
       currency: _currency,
     );
-    if (receipt != null && widget.args.isOrphanSponsorship) {
-      await OrphanSponsorshipService.instance.startSponsorship(
-        args: widget.args.copyWith(sponsorshipMonths: _sponsorshipMonths),
-        amount: amount,
-        currency: _currency,
-        months: _sponsorshipMonths,
-      );
+    if (receipt != null && _isSponsorship) {
       if (mounted) context.go(AppRoutes.mySponsorships);
       return;
     }
@@ -120,14 +114,13 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
 
     return Scaffold(
       appBar: AtaaAppBar(
-        title: widget.args.isOrphanSponsorship
-            ? 'sponsor_now'.tr()
-            : 'donate_amount_title'.tr(),
+        title: _isSponsorship ? 'sponsor_now'.tr() : 'donate_amount_title'.tr(),
       ),
       body: _loadingWallet
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -227,44 +220,13 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  if (widget.args.isOrphanSponsorship) ...[
-                    Text(
-                      'sponsor_months_label'.tr(),
-                      style: TextStyle(fontSize: 13, color: ext.textSecondary),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _monthOptions.map((months) {
-                        final selected = _sponsorshipMonths == months;
-                        return ChoiceChip(
-                          label: Text(
-                            'sponsor_months_value'.tr(
-                              namedArgs: {'months': '$months'},
-                            ),
-                          ),
-                          selected: selected,
-                          onSelected: (_) =>
-                              setState(() => _sponsorshipMonths = months),
-                          selectedColor: cs.primary.withValues(alpha: 0.18),
-                          labelStyle: TextStyle(
-                            color: cs.onSurface,
-                            fontWeight: selected
-                                ? FontWeight.w800
-                                : FontWeight.w600,
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
                   CustomTextField(
                     controller: _amountController,
-                    label: widget.args.isOrphanSponsorship
+                    label: _isSponsorship
                         ? 'sponsor_amount_label'.tr()
                         : 'donate_amount_label'.tr(),
                     hint: 'donate_amount_hint'.tr(),
+                    autofocus: _isSponsorship,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
@@ -295,9 +257,44 @@ class _DonateAmountScreenState extends State<DonateAmountScreen> {
                       );
                     }).toList(),
                   ),
+                  if (_isSponsorship) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      'sponsor_months_label'.tr(),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _monthOptions.map((months) {
+                        final selected = _months == months;
+                        return ChoiceChip(
+                          label: Text(
+                            'sponsor_months_value'.tr(
+                              namedArgs: {'months': '$months'},
+                            ),
+                          ),
+                          selected: selected,
+                          onSelected: (_) => setState(() => _months = months),
+                          selectedColor: cs.primary.withValues(alpha: 0.18),
+                          labelStyle: TextStyle(
+                            color: cs.onSurface,
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   CustomButton(
-                    label: widget.args.isOrphanSponsorship
+                    label: _isSponsorship
                         ? 'sponsor_confirm_btn'.tr()
                         : 'donate_confirm_btn'.tr(),
                     variant: ButtonVariant.primary,

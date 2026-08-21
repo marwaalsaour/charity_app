@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/home/logic/home_cubit.dart';
 import '../../features/notifications/data/repositories/notification_repository.dart';
 import '../../features/notifications/logic/notifications_cubit.dart';
+import '../../features/requests/logic/cubit/request_cubit.dart';
 
 /// Clears per-account local data so a new login starts empty.
 ///
@@ -20,9 +21,7 @@ class SessionStore {
     'open_accepted_cases_v1',
   };
 
-  static const _keepPrefixes = [
-    'flutter.',
-  ];
+  static const _keepPrefixes = ['flutter.'];
 
   static bool _shouldKeep(String key) {
     if (_keepExact.contains(key)) return true;
@@ -47,6 +46,9 @@ class SessionStore {
     } catch (_) {}
     try {
       context.read<NotificationsCubit>().resetSession();
+    } catch (_) {}
+    try {
+      context.read<RequestCubit>().resetSession();
     } catch (_) {}
   }
 }

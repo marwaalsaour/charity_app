@@ -10,7 +10,7 @@ import '../../../../core/auth/user_role_cubit.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/firebase_bootstrap.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../logic/login_cubit.dart';
@@ -129,9 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (!context.mounted) return;
                               context.go(widget.role.homeRoute);
                               unawaited(
-                                NotificationService.instance.init(
-                                  role: widget.role.name,
-                                ),
+                                bootstrapFirebase(role: widget.role.name),
                               );
                               context.read<NotificationsCubit>().load(
                                     role: widget.role,

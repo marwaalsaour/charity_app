@@ -141,10 +141,14 @@ class NotificationService {
     );
 
     if (!kIsWeb && Platform.isAndroid) {
-      final androidPlugin = _localNotifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.requestNotificationsPermission();
+      try {
+        final androidPlugin = _localNotifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
+        await androidPlugin?.requestNotificationsPermission();
+      } catch (e, stack) {
+        debugPrint('Android notification permission failed: $e\n$stack');
+      }
     }
   }
 
@@ -167,7 +171,6 @@ class NotificationService {
       final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.requestNotificationsPermission();
       await androidPlugin?.createNotificationChannel(channel);
     }
 

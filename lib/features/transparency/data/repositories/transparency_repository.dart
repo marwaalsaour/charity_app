@@ -11,6 +11,7 @@ import '../../../donations/data/case_donation_stats_cache.dart';
 import '../../../donations/data/models/donation_model.dart';
 import '../../../donations/data/repositories/donation_repository.dart';
 import '../../../profile/data/models/wallet_currencies.dart';
+import '../../../volunteer/data/repositories/volunteer_api_repository.dart';
 import '../models/transparency_model.dart';
 
 /// Public transparency file. Admin updates most stats and report files.
@@ -20,26 +21,41 @@ class TransparencyRepository {
     Dio? dio,
     DonationRepository? donationRepository,
     CommunityCampaignRepository? campaignRepository,
+    VolunteerApiRepository? volunteerRepository,
   })  : _dio = dio ?? ApiClient.instance.dio,
         _donationRepository = donationRepository ?? DonationRepository(),
         _campaignRepository =
-            campaignRepository ?? CommunityCampaignRepository();
+            campaignRepository ?? CommunityCampaignRepository(),
+        _volunteerRepository =
+            volunteerRepository ?? VolunteerApiRepository(dio: dio);
 
   final Dio _dio;
   final DonationRepository _donationRepository;
   final CommunityCampaignRepository _campaignRepository;
+  final VolunteerApiRepository _volunteerRepository;
 
-  static const _cacheKey = 'transparency_snapshot_v4';
+  static const _cacheKey = 'transparency_snapshot_v7';
 
   Future<TransparencyData> fetch() async {
     final remote = await _tryTransparency() ?? await _tryDashboardKpis();
+    final volunteers =
+        await _volunteerRepository.fetchTotalApprovedVolunteerCount();
+    final reports = await _tryMonthlyReports();
+    final annual = await _tryAnnualFromMonthlyDonations();
     final base = remote ?? (await _readCache()) ?? TransparencyData.empty;
-    final totalUsd = await _sumCasesAndCampaignsUsd();
+
+    final apiTotal = base.stats.totalDonations;
+    final totalUsd =
+        apiTotal > 0 ? apiTotal : await _sumCasesAndCampaignsUsd();
+
     final data = base.copyWith(
       stats: base.stats.copyWith(
         totalDonations: totalUsd,
         currency: 'USD',
+        volunteers: volunteers ?? base.stats.volunteers,
       ),
+      annualReport: annual ?? base.annualReport,
+      financialReport: reports ?? base.financialReport,
     );
     await _writeCache(data);
     return data;
@@ -65,6 +81,90 @@ class TransparencyRepository {
         stats: _parseStats(payload),
         annualReport: const TransparencyDocument(),
         financialReport: const TransparencyDocument(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<TransparencyDocument?> _tryMonthlyReports() async {
+    final now = DateTime.now();
+    try {
+      final response = await _dio.get(
+        '/reports/complete-disbursement/${now.year}/${now.month}',
+      );
+      final data = response.data;
+      if (data is! Map || data['success'] != true) {
+        return _tryDonationsReport(now);
+      }
+      final report = data['report'] is Map
+          ? Map<String, dynamic>.from(data['report'] as Map)
+          : Map<String, dynamic>.from(data);
+      final summary = report['summary'] is Map
+          ? Map<String, dynamic>.from(report['summary'] as Map)
+          : report;
+      final total = summary['total'] is Map
+          ? Map<String, dynamic>.from(summary['total'] as Map)
+          : summary;
+      final amount = total['total_amount'] ??
+          report['total_amount_usd'] ??
+          total['total_amount_usd'];
+      final period =
+          report['period']?.toString() ?? '${now.month}/${now.year}';
+      return TransparencyDocument(
+        year: '${now.year}',
+        period: period,
+        summaryEn:
+            'Disbursed this period: ${amount ?? 0} USD across campaigns and cases.',
+        summaryAr:
+            'المصروف خلال هذه الفترة: ${amount ?? 0} دولار للحملات والحالات.',
+      );
+    } catch (_) {
+      return _tryDonationsReport(now);
+    }
+  }
+
+  Future<TransparencyDocument?> _tryDonationsReport(DateTime now) async {
+    try {
+      final response = await _dio.get(
+        '/reports/donations/${now.year}/${now.month}',
+      );
+      final data = response.data;
+      if (data is! Map || data['success'] != true) return null;
+      final amount = data['total_amount_usd'];
+      final count = data['donations_count'];
+      final period = data['period']?.toString() ?? '${now.month}/${now.year}';
+      return TransparencyDocument(
+        year: '${now.year}',
+        period: period,
+        summaryEn: 'Donations this period: $count transactions, $amount USD.',
+        summaryAr: 'تبرعات هذه الفترة: $count عملية، $amount دولار.',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<TransparencyDocument?> _tryAnnualFromMonthlyDonations() async {
+    try {
+      final response = await _dio.get('/dashboard/monthly-donations');
+      final data = response.data;
+      if (data is! Map || data['success'] != true) return null;
+      final donations = data['donations'];
+      if (donations is! List) return null;
+      var total = 0.0;
+      for (final item in donations) {
+        if (item is! Map) continue;
+        total += _toDouble(item['amount_usd']) ?? 0;
+      }
+      final year = DateTime.now().year.toString();
+      return TransparencyDocument(
+        year: year,
+        period: year,
+        summaryEn:
+            'Last 12 months of recorded donations total ${total.toStringAsFixed(2)} USD.',
+        summaryAr:
+            'إجمالي التبرعات المسجّلة خلال آخر 12 شهراً ${total.toStringAsFixed(2)} دولار.',
       );
     } catch (_) {
       return null;
@@ -162,7 +262,9 @@ class TransparencyRepository {
 
   TransparencyStats _parseStats(Map<String, dynamic> payload) {
     final usdDirect = _toDouble(
-      payload['total_donations_usd'] ?? payload['total_donations_in_usd'],
+      payload['total_donations_usd'] ??
+          payload['total_donations_in_usd'] ??
+          payload['total_donated_usd'],
     );
     final sourceCode = WalletCurrencies.normalizeCode(
           payload['currency']?.toString() ??

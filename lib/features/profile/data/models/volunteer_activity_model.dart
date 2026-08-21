@@ -28,12 +28,14 @@ class VolunteerActivityModel {
 
   factory VolunteerActivityModel.fromJson(Map<String, dynamic> json) {
     return VolunteerActivityModel(
-      id: json['id'] as String,
-      campaignId: json['campaign_id'] as String,
-      campaignTitleKey: json['campaign_title_key'] as String,
-      locationKey: json['location_key'] as String,
-      hours: json['hours'] as int,
-      date: DateTime.parse(json['date'] as String),
+      id: json['id']?.toString() ?? '',
+      campaignId: json['campaign_id']?.toString() ?? '0',
+      campaignTitleKey: json['campaign_title_key']?.toString() ?? '',
+      locationKey: json['location_key']?.toString() ?? '',
+      hours: json['hours'] is num
+          ? (json['hours'] as num).round()
+          : int.tryParse('${json['hours']}') ?? 0,
+      date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 }
@@ -47,6 +49,11 @@ class CampaignVolunteerSummary {
   final bool useTranslationKeys;
   /// pending | approved | rejected | ''
   final String status;
+  final String type;
+  final String titleAr;
+  final String titleEn;
+  final String locationAr;
+  final String locationEn;
 
   const CampaignVolunteerSummary({
     required this.campaignId,
@@ -56,13 +63,46 @@ class CampaignVolunteerSummary {
     required this.lastDate,
     this.useTranslationKeys = true,
     this.status = '',
+    this.type = '',
+    this.titleAr = '',
+    this.titleEn = '',
+    this.locationAr = '',
+    this.locationEn = '',
   });
 
-  String get displayTitle =>
-      useTranslationKeys ? titleKey.tr() : titleKey;
+  String localizedTitle(String languageCode) {
+    if (useTranslationKeys && titleKey.isNotEmpty) return titleKey.tr();
+    final preferred = languageCode == 'ar' ? titleAr : titleEn;
+    final resolved = _resolveText(
+      preferred.isNotEmpty ? preferred : titleKey,
+    );
+    if (resolved.isNotEmpty) return resolved;
+    return 'campaign_unnamed'.tr(namedArgs: {'id': campaignId});
+  }
 
-  String get displayLocation =>
-      useTranslationKeys ? locationKey.tr() : locationKey;
+  String localizedLocation(String languageCode) {
+    if (useTranslationKeys && locationKey.isNotEmpty) return locationKey.tr();
+    final preferred = languageCode == 'ar' ? locationAr : locationEn;
+    return _resolveText(preferred.isNotEmpty ? preferred : locationKey);
+  }
+
+  String get typeLabel {
+    switch (type.toLowerCase().trim()) {
+      case 'educational':
+      case 'education':
+        return 'community_campaigns.cat_education'.tr();
+      case 'medical':
+      case 'patients':
+        return 'categories.patients'.tr();
+      case 'humanitarian':
+        return 'community_campaigns.cat_humanitarian'.tr();
+      case 'environmental':
+      case 'environment':
+        return 'community_campaigns.cat_environmental'.tr();
+      default:
+        return '';
+    }
+  }
 
   String get statusLabel {
     switch (status.toLowerCase()) {
@@ -73,7 +113,20 @@ class CampaignVolunteerSummary {
       case 'rejected':
         return 'volunteer_status_rejected'.tr();
       default:
-        return displayLocation;
+        return '';
     }
+  }
+
+  static String _resolveText(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+    if (_isTranslationKey(text)) return text.tr();
+    return text;
+  }
+
+  static bool _isTranslationKey(String value) {
+    return !value.contains(' ') &&
+        value.contains('.') &&
+        RegExp(r'^[a-zA-Z0-9_.]+$').hasMatch(value);
   }
 }

@@ -33,14 +33,15 @@ class AuthRepository {
     required String password,
     String? userCategory,
   }) async {
-    final isEmail = input.contains('@');
+    final isEmail = input.contains('@') || input.contains('＠');
+    final secret = password.trim();
     ApiException? lastError;
 
     if (isEmail) {
       return _loginOnce(
         body: {
-          'email': input.trim(),
-          'password': password,
+          'email': input.trim().toLowerCase().replaceAll('＠', '@'),
+          'password': secret,
         },
         isEmail: true,
       );
@@ -49,16 +50,15 @@ class AuthRepository {
     for (final phone in AuthPhone.loginCandidates(input)) {
       try {
         return await _loginOnce(
-          body: {
-            'phone': phone,
-            'password': password,
-          },
+          body: {'phone': phone, 'password': secret},
           isEmail: false,
         );
       } on ApiException catch (e) {
         lastError = e;
+        // 403 means the number was found (pending/rejected) — do not try other formats.
+        if (e.statusCode == 403) rethrow;
         if (e.statusCode != 401 &&
-            e.statusCode != 403 &&
+            e.statusCode != 400 &&
             e.statusCode != 422) {
           rethrow;
         }
@@ -77,16 +77,18 @@ class AuthRepository {
         '/signin',
         data: body,
         options: Options(
-          contentType: Headers.jsonContentType,
+          contentType: Headers.formUrlEncodedContentType,
           validateStatus: (status) => status != null && status < 500,
         ),
       );
       final data = response.data;
       final token = _extractToken(data);
       if (token == null || token.isEmpty) {
+        final succeeded = data is Map && data['success'] == true;
         throw ApiException(
-          _messageFrom(data) ??
-              (isEmail ? 'auth_error_wrong_email' : 'auth_error_wrong_phone'),
+          succeeded
+              ? 'auth_error_server'
+              : _loginFailureMessage(data, isEmail: isEmail),
           statusCode: response.statusCode,
         );
       }
@@ -220,6 +222,108 @@ class AuthRepository {
     }
   }
 
+  /// Deletes the signed-in user on the server.
+  ///
+  /// Prefers DELETE /deleteMyAccount (authenticated self-delete).
+  /// Falls back to DELETE /deleteUser/{id} on older deployments.
+  Future<void> deleteAccount() async {
+    try {
+      var response = await _dio.delete(
+        '/deleteMyAccount',
+        options: Options(
+          headers: {Headers.acceptHeader: Headers.jsonContentType},
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (response.statusCode == 404) {
+        final userId = await _resolvedUserId();
+        response = await _dio.delete(
+          '/deleteUser/$userId',
+          options: Options(
+            headers: {Headers.acceptHeader: Headers.jsonContentType},
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+      }
+
+      // ignore: avoid_print
+      print(
+        '[deleteAccount] status=${response.statusCode} body=${response.data}',
+      );
+
+      if (_isDeleteSuccess(response)) {
+        await _clearLocalAuth();
+        return;
+      }
+      throw ApiException(
+        _deleteErrorKey(response.data, response.statusCode),
+        statusCode: response.statusCode,
+      );
+    } on ApiException {
+      rethrow;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        throw const ApiException('auth_error_network');
+      }
+      throw ApiException(
+        _deleteErrorKey(e.response?.data, status),
+        statusCode: status,
+      );
+    }
+  }
+
+  Future<int> _resolvedUserId({bool forceSync = false}) async {
+    final synced = await syncProfile();
+    if (synced?.id != null && synced!.id! > 0) return synced.id!;
+
+    final stored = await _profileRepository.getCurrentUserId();
+    final parsed = int.tryParse(stored ?? '');
+    if (parsed != null && parsed > 0) return parsed;
+
+    throw const ApiException('delete_account_failed');
+  }
+
+  bool _isDeleteSuccess(Response response) {
+    final code = response.statusCode ?? 0;
+    if (code == 204) return true;
+    if (code != 200 && code != 201) return false;
+    final data = response.data;
+    if (data is Map && data['success'] == false) return false;
+    if (data is Map && data['success'] == true) return true;
+    if (data is Map) {
+      final message = data['message']?.toString().toLowerCase() ?? '';
+      if (message.contains('deleted')) return true;
+    }
+    return false;
+  }
+
+  String _deleteErrorKey(dynamic data, int? status) {
+    if (status == 401) return 'auth_session_expired';
+    if (status == 403) return 'delete_account_failed';
+    final message = _messageFrom(data)?.toLowerCase() ?? '';
+    if (message.contains('unauthenticated')) return 'auth_session_expired';
+    if (message.contains('could not be found') ||
+        message.contains('not found')) {
+      return 'delete_account_failed';
+    }
+    return 'delete_account_failed';
+  }
+
+  Future<void> _clearLocalAuth() async {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        await FirebaseMessaging.instance.deleteToken();
+      }
+    } catch (_) {}
+    await _tokenStorage.clearToken();
+    await _profileRepository.clearSession();
+  }
+
   Future<UserProfileModel?> syncProfile() async {
     try {
       final response = await _dio.get('/userprofile');
@@ -253,7 +357,7 @@ class AuthRepository {
       final map = <String, dynamic>{
         'first_name': firstName.trim(),
         'last_name': lastName.trim(),
-        'phone': AuthPhone.normalize(phone),
+        'phone': AuthPhone.forApi(phone),
         'address': address.trim(),
       };
 
@@ -316,6 +420,49 @@ class AuthRepository {
     }
   }
 
+  /// POST /changePassword
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/changePassword',
+        data: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'new_password_confirmation': newPassword,
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final data = response.data;
+      if (data is Map && data['success'] == true) return;
+      throw ApiException(
+        _messageFrom(data) ?? 'change_password_failed',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final message = _messageFrom(e.response?.data);
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        throw const ApiException('auth_error_network');
+      }
+      if (status == 400) {
+        throw ApiException(
+          message ?? 'change_password_current_wrong',
+          statusCode: status,
+        );
+      }
+      throw ApiException(
+        message ?? 'change_password_failed',
+        statusCode: status,
+      );
+    }
+  }
+
   Future<void> register(RegisterParams params) async {
     await _tokenStorage.clearToken();
     final map = <String, dynamic>{
@@ -335,9 +482,11 @@ class AuthRepository {
     final phone = params.phone?.trim();
     final email = params.email?.trim();
     if (phone != null && phone.isNotEmpty) {
-      map['phone'] = AuthPhone.normalize(phone);
+      map['phone'] = AuthPhone.forApi(phone);
     }
-    if (email != null && email.isNotEmpty) map['email'] = email;
+    if (email != null && email.isNotEmpty) {
+      map['email'] = email.toLowerCase();
+    }
 
     if (params.nationalIdImage != null) {
       map['national_id'] = await MultipartFile.fromFile(
@@ -386,10 +535,9 @@ class AuthRepository {
       );
     }
 
-    if (status == 422) {
-      final firstError = _firstValidationError(data);
+    if (status == 422 || status == 400) {
       return ApiException(
-        firstError ?? _messageFrom(data) ?? 'auth_error_generic',
+        _authUserMessage(data, isEmail: false) ?? 'auth_error_generic',
         statusCode: status,
       );
     }
@@ -420,8 +568,7 @@ class AuthRepository {
 
     if (status == 403) {
       return ApiException(
-        message ??
-            (isEmail ? 'auth_error_wrong_email' : 'auth_error_wrong_phone'),
+        _loginFailureMessage(e.response?.data, isEmail: isEmail),
         statusCode: status,
       );
     }
@@ -448,25 +595,44 @@ class AuthRepository {
 
   String? _extractToken(dynamic data) {
     if (data is! Map) return null;
-    final direct = data['token'] ?? data['access_token'] ?? data['accessToken'];
-    if (direct != null && direct.toString().trim().isNotEmpty) {
-      return direct.toString();
-    }
+    final direct = _tokenValue(
+      data['token'] ??
+          data['access_token'] ??
+          data['accessToken'] ??
+          data['auth_token'] ??
+          data['authToken'] ??
+          data['bearer_token'],
+    );
+    if (direct != null) return direct;
     final nested = data['data'];
     if (nested is Map) {
-      final token =
-          nested['token'] ?? nested['access_token'] ?? nested['accessToken'];
-      if (token != null && token.toString().trim().isNotEmpty) {
-        return token.toString();
-      }
+      final token = _tokenValue(
+        nested['token'] ??
+            nested['access_token'] ??
+            nested['accessToken'] ??
+            nested['auth_token'],
+      );
+      if (token != null) return token;
     }
     final user = data['user'];
     if (user is Map) {
-      final token =
-          user['token'] ?? user['access_token'] ?? user['accessToken'];
-      if (token != null && token.toString().trim().isNotEmpty) {
-        return token.toString();
-      }
+      final token = _tokenValue(
+        user['token'] ?? user['access_token'] ?? user['accessToken'],
+      );
+      if (token != null) return token;
+    }
+    return null;
+  }
+
+  String? _tokenValue(dynamic value) {
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    if (value is Map) {
+      return _tokenValue(
+        value['plainTextToken'] ??
+            value['plain_text_token'] ??
+            value['access_token'] ??
+            value['token'],
+      );
     }
     return null;
   }
@@ -477,6 +643,40 @@ class AuthRepository {
       if (message is String && message.trim().isNotEmpty) return message;
     }
     return null;
+  }
+
+  String _loginFailureMessage(dynamic data, {required bool isEmail}) {
+    final raw = (_firstValidationError(data) ?? _messageFrom(data) ?? '')
+        .toLowerCase();
+    if (raw.contains('pending')) return 'auth_error_pending';
+    if (raw.contains('rejected')) return 'auth_error_rejected';
+    if (raw.contains('please enter your email') ||
+        raw.contains('please enter your phone')) {
+      return 'auth_error_generic';
+    }
+    if (raw.contains('phone') && raw.contains('format')) {
+      return 'auth_phone_invalid';
+    }
+    if (raw.contains('email') && raw.contains('format')) {
+      return 'auth_email_invalid';
+    }
+    return isEmail ? 'auth_error_wrong_email' : 'auth_error_wrong_phone';
+  }
+
+  String? _authUserMessage(dynamic data, {required bool isEmail}) {
+    final raw = _firstValidationError(data) ?? _messageFrom(data);
+    if (raw == null || raw.trim().isEmpty) return null;
+    final lower = raw.toLowerCase();
+    if (lower.contains('phone') && lower.contains('format')) {
+      return 'auth_phone_invalid';
+    }
+    if (lower.contains('email') && lower.contains('format')) {
+      return 'auth_email_invalid';
+    }
+    if (lower.contains('already') || lower.contains('taken')) {
+      return 'auth_error_already_exists';
+    }
+    return raw;
   }
 
   String? _firstValidationError(dynamic data) {

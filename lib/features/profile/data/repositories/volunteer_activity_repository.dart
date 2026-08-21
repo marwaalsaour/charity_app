@@ -31,16 +31,9 @@ class VolunteerActivityRepository {
     await prefs.setStringList(_storageKey, existing);
   }
 
-  Future<int> getTotalHours() async {
-    try {
-      final hours = await _api.fetchMyVolunteerHours();
-      if (hours.totalHours > 0 || hours.entries.isNotEmpty) {
-        return hours.totalHours.round();
-      }
-    } catch (_) {}
-
-    final activities = await _getLocalActivities();
-    return activities.fold<int>(0, (sum, a) => sum + a.hours);
+  Future<double> getTotalHours() async {
+    final hours = await _api.fetchMyVolunteerHours();
+    return hours.totalHours;
   }
 
   Future<List<CampaignVolunteerSummary>> getCampaignSummaries() async {
@@ -73,21 +66,35 @@ class VolunteerActivityRepository {
     void addCampaign(Map<String, dynamic> item, {required String status}) {
       final id = item['id']?.toString();
       if (id == null) return;
-      final title = item['title']?.toString() ?? 'Campaign #$id';
+      final titleAr = _localizedField(item, 'title', 'ar');
+      final titleEn = _localizedField(item, 'title', 'en');
+      final title = titleEn.isNotEmpty
+          ? titleEn
+          : (titleAr.isNotEmpty ? titleAr : '');
       final myStatus = item['my_status']?.toString() ?? status;
-      final location = item['location']?.toString() ??
-          item['place']?.toString() ??
-          '';
+      var locationAr = _localizedField(item, 'location', 'ar');
+      var locationEn = _localizedField(item, 'location', 'en');
+      if (locationAr.isEmpty && locationEn.isEmpty) {
+        locationEn = _localizedField(item, 'place', 'en');
+        locationAr = _localizedField(item, 'place', 'ar');
+        if (locationAr.isEmpty) locationAr = locationEn;
+        if (locationEn.isEmpty) locationEn = locationAr;
+      }
       map[id] = CampaignVolunteerSummary(
         campaignId: id,
         titleKey: title,
-        locationKey: location.isNotEmpty ? location : myStatus,
+        titleAr: titleAr,
+        titleEn: titleEn,
+        locationKey: locationEn.isNotEmpty ? locationEn : locationAr,
+        locationAr: locationAr,
+        locationEn: locationEn,
         totalHours: (hoursByCampaign[id] ?? 0).round(),
         lastDate: lastFor(id) ??
             DateTime.tryParse(item['assigned_date']?.toString() ?? '') ??
             DateTime.now(),
-        useTranslationKeys: false,
+        useTranslationKeys: _isTranslationKey(title),
         status: myStatus,
+        type: item['type']?.toString() ?? '',
       );
     }
 
@@ -151,7 +158,8 @@ class VolunteerActivityRepository {
       return VolunteerActivityModel(
         id: entry['id']?.toString() ??
             DateTime.now().millisecondsSinceEpoch.toString(),
-        campaignId: entry['campaign_id']?.toString() ?? '0',
+        campaignId: entry['campaign_id']?.toString() ??
+            (campaign is Map ? campaign['id']?.toString() ?? '0' : '0'),
         campaignTitleKey: title,
         locationKey: entry['activity_description']?.toString() ?? '',
         hours: h,
@@ -166,14 +174,71 @@ class VolunteerActivityRepository {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_storageKey) ?? [];
     return raw
-        .map(
-          (e) => VolunteerActivityModel.fromJson(
-            jsonDecode(e) as Map<String, dynamic>,
-          ),
-        )
+        .map((e) {
+          try {
+            return VolunteerActivityModel.fromJson(
+              jsonDecode(e) as Map<String, dynamic>,
+            );
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<VolunteerActivityModel>()
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
   static int hoursFromSlotCount(int slotCount) => slotCount * hoursPerSlot;
+
+  static bool _isTranslationKey(String value) {
+    return !value.contains(' ') &&
+        value.contains('.') &&
+        RegExp(r'^[a-zA-Z0-9_.]+$').hasMatch(value);
+  }
+
+  static String _localizedField(
+    Map<String, dynamic> item,
+    String base,
+    String languageCode,
+  ) {
+    final nested = item[base];
+    if (nested is Map) {
+      final fromMap = _stringFromLocaleMap(nested, languageCode);
+      if (fromMap.isNotEmpty) return fromMap;
+    }
+
+    final translations = item['translations'];
+    if (translations is Map) {
+      final field = translations[base];
+      if (field is Map) {
+        final fromMap = _stringFromLocaleMap(field, languageCode);
+        if (fromMap.isNotEmpty) return fromMap;
+      }
+    }
+
+    final keys = languageCode == 'ar'
+        ? ['${base}_ar', '${base}Ar', 'ar_$base', 'arabic_$base']
+        : ['${base}_en', '${base}En', 'en_$base', 'english_$base'];
+    for (final key in keys) {
+      final value = item[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+
+    if (nested is String && nested.trim().isNotEmpty) return nested.trim();
+    return '';
+  }
+
+  static String _stringFromLocaleMap(
+    Map<dynamic, dynamic> map,
+    String languageCode,
+  ) {
+    final preferred = languageCode == 'ar'
+        ? [map['ar'], map['arabic'], map['ar_title']]
+        : [map['en'], map['english'], map['en_title']];
+    for (final value in preferred) {
+      final text = value?.toString().trim();
+      if (text != null && text.isNotEmpty) return text;
+    }
+    return '';
+  }
 }

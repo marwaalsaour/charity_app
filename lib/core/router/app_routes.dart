@@ -14,6 +14,7 @@ class AppRoutes {
   static const donorContactUs = '/donor/contact-us';
   static const donorAbout = '/donor/about';
   static const donorTransparency = '/donor/transparency';
+  static const donorAllCampaigns = '/donor/all_campaigns';
 
   // Beneficiary routes
   static const beneficiaryHome = '/beneficiary/home';

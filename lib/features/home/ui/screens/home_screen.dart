@@ -13,7 +13,6 @@ import '../../../donations/data/models/donation_checkout_args.dart';
 import '../../../donations/ui/utils/donation_flow_helper.dart';
 import '../../../profile/data/models/user_profile_model.dart';
 import '../../../profile/data/repositories/user_profile_repository.dart';
-import '../../data/models/campaign_model.dart';
 import '../../data/models/search_suggestion.dart';
 import '../../logic/home_cubit.dart';
 import '../../logic/home_state.dart';
@@ -21,6 +20,7 @@ import '../../logic/home_state.dart';
 import '../widgets/association_map_card.dart';
 import '../widgets/campaign_card.dart';
 import '../widgets/category_tabs.dart';
+import '../widgets/home_campaign_card.dart';
 import '../widgets/quick_donate_button.dart';
 import '../widgets/search_bar_widget.dart';
 import '../widgets/stats_card.dart';
@@ -184,12 +184,21 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: cs.onSurface,
                           ),
                         ),
-                        Text(
-                          'view_all'.tr(),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: cs.primary,
+                        TextButton(
+                          onPressed: () =>
+                              context.push(AppRoutes.donorAllCampaigns),
+                          style: TextButton.styleFrom(
+                            foregroundColor: cs.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            'view_all'.tr(),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -215,62 +224,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: state.filteredCampaigns.length,
                             itemBuilder: (context, i) {
-                              final campaign = state.filteredCampaigns[i];
-
-                              return CampaignCard(
-                                title:
-                                    campaign.linkedDonation?.cardTitle ??
-                                    campaign.displayTitle,
-                                category: campaign.categoryLabelKey.tr(),
-                                image: campaign.imageUrl,
-                                progress: campaign.progress,
-                                progressPercent: campaign.progressPercent,
-                                goal: campaign.formattedGoal(context.locale),
-                                donation: campaign.linkedDonation,
-                                onTap: () =>
-                                    _openCampaignDetails(context, campaign),
-                                onDonateTap: campaign.isFullyFunded
-                                    ? null
-                                    : () {
-                                        final linked = campaign.linkedDonation;
-                                        final community =
-                                            campaign.linkedCommunity;
-                                        if (community != null) {
-                                          openDonateAmountScreen(
-                                            context,
-                                            donateArgsForCommunityCampaign(
-                                              community,
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        openDonateAmountScreen(
-                                          context,
-                                          DonationCheckoutArgs(
-                                            causeTitle:
-                                                linked?.cardTitle ??
-                                                campaign.displayTitle,
-                                            targetType:
-                                                linked?.donateTargetType ??
-                                                DonationTargetType.association,
-                                            targetId:
-                                                linked != null && linked.id > 0
-                                                ? linked.id
-                                                : null,
-                                            caseCurrency: linked?.displayCurrency,
-                                          ),
-                                        );
-                                      },
-                                onSponsorTap: campaign.isFullyFunded
-                                    ? null
-                                    : () {
-                                        final linked = campaign.linkedDonation;
-                                        if (linked == null) return;
-                                        openDonateAmountScreen(
-                                          context,
-                                          linked.sponsorshipCheckoutArgs,
-                                        );
-                                      },
+                              return HomeCampaignCard(
+                                campaign: state.filteredCampaigns[i],
                               );
                             },
                           ),
@@ -307,18 +262,7 @@ class _HomeScreenState extends State<HomeScreen> {
     cubit.filterBySearch(suggestion.query);
 
     if (suggestion.campaign != null) {
-      _openCampaignDetails(context, suggestion.campaign!);
-    }
-  }
-
-  void _openCampaignDetails(BuildContext context, CampaignModel campaign) {
-    if (campaign.linkedDonation != null) {
-      context.push(AppRoutes.donationDetails, extra: campaign.linkedDonation);
-    } else if (campaign.linkedCommunity != null) {
-      context.push(
-        AppRoutes.communityCampaignDetails,
-        extra: campaign.linkedCommunity,
-      );
+      openHomeCampaignDetails(context, suggestion.campaign!);
     }
   }
 

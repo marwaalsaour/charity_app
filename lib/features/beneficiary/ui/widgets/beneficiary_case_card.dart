@@ -216,7 +216,9 @@ class BeneficiaryCaseCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'beneficiary_amount_transferred'.tr(),
+                      item.isDisbursed
+                          ? 'beneficiary_amount_disbursed'.tr()
+                          : 'beneficiary_amount_awaiting_disbursement'.tr(),
                       style: const TextStyle(
                         fontSize: 13,
                         height: 1.35,

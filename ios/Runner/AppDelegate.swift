@@ -8,10 +8,11 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
-    if let registrar = self.registrar(forPlugin: "AtaaSharePlugin") {
+    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    if let controller = window?.rootViewController as? FlutterViewController {
       let channel = FlutterMethodChannel(
         name: "ataa/share",
-        binaryMessenger: registrar.messenger()
+        binaryMessenger: controller.binaryMessenger
       )
       channel.setMethodCallHandler { [weak self] call, result in
         guard call.method == "shareFile" else {
@@ -29,7 +30,7 @@ import UIKit
         result(nil)
       }
     }
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    return launched
   }
 
   private func shareFile(path: String) {

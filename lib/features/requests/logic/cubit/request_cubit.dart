@@ -1,8 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../notifications/data/notification_helper.dart';
-import '../../../profile/data/repositories/beneficiary_wallet_store.dart';
-import '../../../donations/data/case_donation_stats_cache.dart';
 import '../../data/models/benefit_request_models.dart';
 import '../../data/repositories/request_repository.dart';
 import '../states/request_state.dart';
@@ -111,15 +109,7 @@ class RequestCubit extends Cubit<RequestState> {
       );
     }
 
-    final next = <BenefitRequestItem>[];
-    for (final item in items) {
-      if (item.isFullyFunded) {
-        await _creditWalletForCompletedCase(item);
-        next.add(item.copyWith(payoutPreference: PayoutPreference.wallet));
-      } else {
-        next.add(item);
-      }
-    }
+    final next = items;
 
     if (isClosed) return;
     emit(state.copyWith(myRequests: next, isLoadingRequests: false));
@@ -165,72 +155,7 @@ class RequestCubit extends Cubit<RequestState> {
   String get supportTypeApiValue =>
       state.supportType == 0 ? 'laptopsupport' : 'tuitionassistance';
 
-  Future<void> _creditWalletForCompletedCase(BenefitRequestItem item) async {
-    final store = BeneficiaryWalletStore();
-    if (await store.isRequestCredited(item.id)) {
-      await repository.setPayoutPreference(
-        requestId: item.id,
-        preference: PayoutPreference.wallet,
-      );
-      return;
-    }
-
-    final stats = await CaseDonationStatsCache.get(item.id);
-    final byCurrency = stats?.raisedByCurrency ?? const <String, double>{};
-    if (byCurrency.values.any((value) => value > 0)) {
-      await store.creditCurrencies(
-        requestId: item.id,
-        amounts: byCurrency,
-      );
-    } else if (item.requiredAmount > 0) {
-      await store.creditRequest(
-        requestId: item.id,
-        amount: item.requiredAmount,
-        currency: item.currency,
-      );
-    }
-
-    await repository.setPayoutPreference(
-      requestId: item.id,
-      preference: PayoutPreference.wallet,
-    );
-  }
-
-  Future<bool> setPayoutPreference(
-    int requestId,
-    PayoutPreference preference,
-  ) async {
-    final saved = await repository.setPayoutPreference(
-      requestId: requestId,
-      preference: preference,
-    );
-    BenefitRequestItem? updated = saved;
-    if (updated == null) {
-      for (final item in state.myRequests) {
-        if (item.id == requestId) {
-          updated = item.copyWith(payoutPreference: preference);
-          break;
-        }
-      }
-    }
-    if (updated == null) return false;
-    final credited = updated;
-
-    if (preference == PayoutPreference.wallet && credited.requiredAmount > 0) {
-      await BeneficiaryWalletStore().creditRequest(
-        requestId: credited.id,
-        amount: credited.requiredAmount,
-        currency: credited.currency,
-      );
-    }
-
-    final items = [
-      for (final item in state.myRequests)
-        item.id == credited.id ? credited : item,
-    ];
-    if (!isClosed) {
-      emit(state.copyWith(myRequests: items));
-    }
-    return true;
+  void resetSession() {
+    emit(const RequestState());
   }
 }

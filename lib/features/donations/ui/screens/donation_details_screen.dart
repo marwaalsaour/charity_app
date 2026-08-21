@@ -113,16 +113,13 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final cs = theme.colorScheme;
     final ext = theme.extension<AppThemeExtension>()!;
-    final percent = (donation.progress * 100).round();
-    final donors = donation.donorCount;
-    final daysLeft = donation.daysLeft;
 
     return Scaffold(
       appBar: AtaaAppBar(
         title: 'donation_details_title'.tr(),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined, color: Colors.white),
+            icon: const Icon(Icons.share_outlined),
             onPressed: () => ShareLinkHelper.copyCaseLink(context, donation),
           ),
         ],
@@ -131,56 +128,103 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  DonationCoverImage(
-                    donation: donation,
-                    aspectRatio: 16 / 10,
-                    borderRadius: BorderRadius.circular(AppRadius.large),
-                  ),
-                  const SizedBox(height: 16),
-                  _CategoryBadge(label: donation.category.titleKey.tr()),
-                  const SizedBox(height: 12),
-                  Text(
-                    donation.cardTitle,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: cs.onSurface,
-                      height: 1.25,
+                  DonationCoverImage(donation: donation, height: 220),
+                  Transform.translate(
+                    offset: const Offset(0, -24),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _CampaignProgressCard(donation: donation),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    donation.displayTitle,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: ext.textSecondary,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  _ProgressCard(
-                    donation: donation,
-                    percent: percent,
-                    donors: donors,
-                    daysLeft: daysLeft,
-                  ),
-                  if (donation.hasVerificationInfo) ...[
-                    const SizedBox(height: 16),
-                    CaseVerificationInfo(donation: donation),
-                  ],
-                  const SizedBox(height: 28),
-                  _SectionHeader(title: 'the_story'.tr()),
-                  const SizedBox(height: 12),
-                  Text(
-                    donation.displayDescription,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: ext.textSecondary,
-                      height: 1.65,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          donation.category.titleKey.tr().toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: ext.textSecondary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          donation.cardTitle,
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        if (donation.displayTitle != donation.cardTitle) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            donation.displayTitle,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: ext.textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _InfoTile(
+                                icon: Icons.people_outline,
+                                label: 'donor_count'.tr(),
+                                value: '${donation.donorCount}',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _InfoTile(
+                                icon: donation.residence != null &&
+                                        donation.residence!.trim().isNotEmpty
+                                    ? Icons.location_on_outlined
+                                    : Icons.schedule_outlined,
+                                label: donation.residence != null &&
+                                        donation.residence!.trim().isNotEmpty
+                                    ? 'location'.tr()
+                                    : 'days_left'.tr(),
+                                value: donation.residence != null &&
+                                        donation.residence!.trim().isNotEmpty
+                                    ? donation.residence!.trim()
+                                    : '${donation.daysLeft}',
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (donation.hasVerificationInfo) ...[
+                          const SizedBox(height: 16),
+                          CaseVerificationInfo(donation: donation),
+                        ],
+                        const SizedBox(height: 24),
+                        Text(
+                          'the_story'.tr(),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          donation.displayDescription,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: ext.textSecondary,
+                            height: 1.6,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -203,35 +247,31 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
               top: false,
               child: donation.isFullyFunded
                   ? const DonationClosedBox()
-                  : onSponsor == null
-                      ? CustomButton(
-                          label: 'donate_now'.tr(),
-                          variant: ButtonVariant.accent,
-                          icon: Icons.favorite_rounded,
-                          height: 54,
-                          onTap: onDonate,
-                        )
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: CustomButton(
-                                label: 'donate_now'.tr(),
-                                variant: ButtonVariant.primary,
-                                height: 54,
-                                onTap: onDonate,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: CustomButton(
-                                label: 'sponsor_now'.tr(),
-                                variant: ButtonVariant.accent,
-                                height: 54,
-                                onTap: onSponsor,
-                              ),
-                            ),
-                          ],
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: CustomButton(
+                            label: 'donate_now'.tr(),
+                            variant: ButtonVariant.primary,
+                            icon: Icons.favorite_rounded,
+                            height: 50,
+                            onTap: onDonate,
+                          ),
                         ),
+                        if (onSponsor != null) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: CustomButton(
+                              label: 'sponsor_now'.tr(),
+                              variant: ButtonVariant.accent,
+                              icon: Icons.volunteer_activism_outlined,
+                              height: 50,
+                              onTap: onSponsor,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
             ),
           ),
         ],
@@ -240,110 +280,73 @@ class _StandardDonationDetailsScreen extends StatelessWidget {
   }
 }
 
-class _CategoryBadge extends StatelessWidget {
-  const _CategoryBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: cs.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: cs.primary,
-          letterSpacing: 0.6,
-        ),
-      ),
-    );
-  }
-}
-
-class _ProgressCard extends StatelessWidget {
-  const _ProgressCard({
-    required this.donation,
-    required this.percent,
-    required this.donors,
-    required this.daysLeft,
-  });
+class _CampaignProgressCard extends StatelessWidget {
+  const _CampaignProgressCard({required this.donation});
 
   final DonationModel donation;
-  final int percent;
-  final int donors;
-  final int daysLeft;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final ext = Theme.of(context).extension<AppThemeExtension>()!;
-    final raised = donation.raised;
-    final goal = donation.goal;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
+    final ext = theme.extension<AppThemeExtension>()!;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: ext.cardBackground,
         borderRadius: BorderRadius.circular(AppRadius.large),
         border: Border.all(color: ext.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'raised_of_goal'.tr(
+              namedArgs: {'goal': donation.formatGoal(context.locale)},
+            ),
+            style: TextStyle(fontSize: 12, color: ext.textSecondary),
+          ),
+          const SizedBox(height: 6),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-                Text(
+              Text(
                 donation.formatRaised(context.locale),
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: 28,
                   fontWeight: FontWeight.w800,
-                  color: cs.onSurface,
+                  color: cs.primary,
                 ),
               ),
+              const Spacer(),
               Text(
-                '$percent%',
+                '${(donation.progress * 100).round()}%',
                 style: const TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   color: AppColors.accentDark,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: goal > 0 ? (raised / goal).clamp(0.0, 1.0) : 0,
+              value: donation.progress,
               minHeight: 8,
               backgroundColor: ext.progressBg,
-              color: ext.progressFill,
+              color: AppColors.accent,
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _MiniStat(value: '$donors', label: 'donor_count'.tr()),
-              ),
-              Expanded(
-                child: _MiniStat(value: '$daysLeft', label: 'days_left'.tr()),
-              ),
-              Expanded(
-                child: _MiniStat(
-                  value: donation.formatGoal(context.locale),
-                  label: 'goal'.tr(),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -351,50 +354,55 @@ class _ProgressCard extends StatelessWidget {
   }
 }
 
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.value, required this.label});
+class _InfoTile extends StatelessWidget {
+  const _InfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
-  final String value;
+  final IconData icon;
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final ext = Theme.of(context).extension<AppThemeExtension>()!;
 
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: cs.onSurface,
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ext.cardBackground,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: ext.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: cs.primary),
+          const SizedBox(height: 8),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: ext.textSecondary,
+              letterSpacing: 0.5,
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: ext.textSecondary),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w800,
-        color: Theme.of(context).colorScheme.onSurface,
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
       ),
     );
   }
